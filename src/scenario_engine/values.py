@@ -12,6 +12,13 @@ from .ids import LogicalID
 class _Missing:
     __slots__ = ()
 
+    def __copy__(self) -> _Missing:
+        return self
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> _Missing:
+        memo[id(self)] = self
+        return self
+
     def __repr__(self) -> str:
         return "MISSING"
 
