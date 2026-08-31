@@ -14,11 +14,13 @@ from .errors import DSLParseError, DSLSchemaError, UnsupportedDSLVersionError
 from .models import ScenarioDocument, StepDocument
 
 
-_TOP_KEYS = {"dsl_version", "scenario", "clock", "initial_state", "steps"}
+_REQUIRED_TOP_KEYS = {"dsl_version", "scenario", "clock", "initial_state", "steps"}
+_TOP_KEYS = _REQUIRED_TOP_KEYS | {"resources", "validators", "constraints"}
 _STEP_KEYS = {"id", "generate", "derive", "write", "emit", "advance", "transition"}
 _EXPRESSION_OPERATORS = {
     "$state", "$local", "$derived", "$literal", "$add", "$mul", "$append",
-    "$object", "$sum_field",
+    "$object", "$sum_field", "$resource", "$sub", "$div", "$eq", "$ne",
+    "$lt", "$lte", "$gt", "$gte", "$and", "$or", "$not", "$len",
 }
 _GENERATOR_OPERATORS = {"$int", "$id", "$literal"}
 
@@ -105,24 +107,34 @@ def _symbol(value: Any, path: str) -> None:
         _fail(path, "expected non-empty top-level symbolic name")
 
 
-def _validate_expression(node: Any, path: str, *, emission: bool = False) -> None:
+def _validate_expression(node: Any, path: str, *, emission: bool = False,
+                         constraint: bool = False) -> None:
     mapping = _mapping(node, path)
     if len(mapping) != 1:
         _fail(path, "expression must contain exactly one operator")
     operator, payload = next(iter(mapping.items()))
     if operator not in _EXPRESSION_OPERATORS:
         _fail(path, f"unknown expression operator {operator}")
-    if emission and operator not in {"$state", "$literal"}:
+    if emission and operator not in {"$state", "$literal", "$resource"}:
         _fail(path, f"{operator} is not allowed in emission fields")
-    if operator in {"$state", "$local", "$derived"}:
+    if constraint and operator in {"$state", "$local", "$derived"}:
+        _fail(path, f"{operator} is not allowed in constraints")
+    if operator in {"$state", "$local", "$derived", "$resource"}:
         _symbol(payload, path + "." + operator)
     elif operator == "$literal":
         decode_semantic_value(payload, path + ".$literal")
-    elif operator in {"$add", "$mul"}:
+    elif operator in {"$add", "$mul", "$sub", "$div", "$eq", "$ne", "$lt", "$lte", "$gt", "$gte"}:
         if not isinstance(payload, list) or len(payload) != 2:
             _fail(path + "." + operator, "expected exactly two expressions")
         for index, child in enumerate(payload):
-            _validate_expression(child, f"{path}.{operator}[{index}]", emission=emission)
+            _validate_expression(child, f"{path}.{operator}[{index}]", emission=emission, constraint=constraint)
+    elif operator in {"$and", "$or"}:
+        if not isinstance(payload, list) or not payload:
+            _fail(path + "." + operator, "expected one or more expressions")
+        for index, child in enumerate(payload):
+            _validate_expression(child, f"{path}.{operator}[{index}]", constraint=constraint)
+    elif operator in {"$not", "$len"}:
+        _validate_expression(payload, path + "." + operator, constraint=constraint)
     elif operator == "$append":
         body = _mapping(payload, path + ".$append")
         _only_keys(body, {"list", "value"}, path + ".$append")
@@ -164,6 +176,80 @@ def _validate_generator(node: Any, path: str) -> None:
         decode_semantic_value(payload, path + ".$literal")
 
 
+def _decode_resource(value: Any, path: str) -> Any:
+    if isinstance(value, Mapping):
+        mapping = _mapping(value, path)
+        operators = [key for key in mapping if key.startswith("$")]
+        if operators:
+            if len(mapping) != 1:
+                _fail(path, "resource operator/wrapper must contain exactly one key")
+            operator, payload = next(iter(mapping.items()))
+            if operator in {"$input", "$ref"}:
+                _symbol(payload, path + "." + operator)
+                if any(not segment for segment in payload.split(".")):
+                    _fail(path + "." + operator, "invalid dot-separated path")
+                return MappingProxyType({operator: payload})
+            if operator == "$literal":
+                return decode_semantic_value(payload, path + ".$literal")
+            return decode_semantic_value(mapping, path)
+        return MappingProxyType({key: _decode_resource(mapping[key], f"{path}.{key}") for key in mapping})
+    if isinstance(value, list):
+        return tuple(_decode_resource(item, f"{path}[{index}]") for index, item in enumerate(value))
+    return decode_semantic_value(value, path)
+
+
+def _parse_validators(value: Any) -> tuple[Mapping[str, Any], ...]:
+    if not isinstance(value, list):
+        _fail("$.validators", "expected ordered list")
+    result: list[Mapping[str, Any]] = []
+    seen: set[str] = set()
+    type_names = {"integer", "decimal", "boolean", "string", "null", "datetime",
+                  "duration", "logical_id", "list", "map", "missing"}
+    for index, raw in enumerate(value):
+        path = f"$.validators[{index}]"; item = _mapping(raw, path)
+        base = {"id", "resource", "kind"}
+        if not base <= set(item): _fail(path, "id, resource, and kind are required")
+        _symbol(item["id"], path + ".id"); _symbol(item["resource"], path + ".resource")
+        if item["id"] in seen: _fail(path + ".id", f"duplicate validator ID {item['id']}")
+        seen.add(item["id"]); kind = item["kind"]
+        if kind not in {"required", "type", "range", "length", "one_of"}:
+            _fail(path + ".kind", "unknown validator kind")
+        allowed = base | ({"type"} if kind == "type" else {"min", "max"} if kind in {"range", "length"} else {"values"} if kind == "one_of" else set())
+        _only_keys(item, allowed, path)
+        parsed = dict(item)
+        if kind == "type":
+            parsed["type"] = "null" if item.get("type") is None else item.get("type")
+            if parsed["type"] not in type_names: _fail(path + ".type", "unsupported semantic type")
+        if kind in {"range", "length"}:
+            if not ({"min", "max"} & set(item)): _fail(path, "at least one bound is required")
+            for bound in {"min", "max"} & set(item):
+                parsed[bound] = decode_semantic_value(item[bound], path + "." + bound)
+                valid = type(parsed[bound]) in ((int, Decimal) if kind == "range" else (int,))
+                if not valid or (kind == "length" and parsed[bound] < 0): _fail(path + "." + bound, "invalid bound")
+            if "min" in parsed and "max" in parsed and Decimal(parsed["min"]) > Decimal(parsed["max"]): _fail(path, "minimum exceeds maximum")
+        if kind == "one_of":
+            if not isinstance(item.get("values"), list) or not item["values"]: _fail(path + ".values", "expected non-empty list")
+            parsed["values"] = tuple(decode_semantic_value(candidate, path + ".values") for candidate in item["values"])
+        result.append(MappingProxyType(parsed))
+    return tuple(result)
+
+
+def _parse_constraints(value: Any) -> tuple[Mapping[str, Any], ...]:
+    if not isinstance(value, list): _fail("$.constraints", "expected ordered list")
+    result: list[Mapping[str, Any]] = []; seen: set[str] = set()
+    for index, raw in enumerate(value):
+        path = f"$.constraints[{index}]"; item = _mapping(raw, path)
+        _only_keys(item, {"id", "check", "message"}, path)
+        if not {"id", "check"} <= set(item): _fail(path, "id and check are required")
+        _symbol(item["id"], path + ".id")
+        if item["id"] in seen: _fail(path + ".id", f"duplicate constraint ID {item['id']}")
+        seen.add(item["id"])
+        if "message" in item and not isinstance(item["message"], str): _fail(path + ".message", "expected string")
+        _validate_expression(item["check"], path + ".check", constraint=True)
+        result.append(MappingProxyType(dict(item)))
+    return tuple(result)
+
+
 def parse_yaml(text: str) -> ScenarioDocument:
     try:
         loaded = yaml.safe_load(text)
@@ -173,7 +259,7 @@ def parse_yaml(text: str) -> ScenarioDocument:
         raise DSLParseError(f"YAML safe-load failed{location}") from None
     root = _mapping(loaded, "$")
     _only_keys(root, _TOP_KEYS, "$")
-    missing = sorted(_TOP_KEYS - set(root))
+    missing = sorted(_REQUIRED_TOP_KEYS - set(root))
     if missing:
         _fail("$", "missing required key(s): " + ", ".join(missing))
     version = root["dsl_version"]
@@ -192,6 +278,17 @@ def parse_yaml(text: str) -> ScenarioDocument:
         normalize(initial)
     except (TypeError, ValueError) as error:
         _fail("$.initial_state", str(error))
+    resources_raw = _mapping(root.get("resources", {}), "$.resources")
+    if "resources" in root and not resources_raw:
+        _fail("$.resources", "declared resource mapping must be non-empty")
+    resources: dict[str, Any] = {}
+    for name, raw_resource in resources_raw.items():
+        _symbol(name, "$.resources key")
+        resources[name] = _decode_resource(raw_resource, f"$.resources.{name}")
+    validators = _parse_validators(root.get("validators", []))
+    if "constraints" in root and not root["constraints"]:
+        _fail("$.constraints", "declared constraint list must be non-empty")
+    constraints = _parse_constraints(root.get("constraints", []))
     steps_raw = root["steps"]
     if not isinstance(steps_raw, list) or not steps_raw:
         _fail("$.steps", "expected non-empty ordered list")
@@ -249,7 +346,8 @@ def parse_yaml(text: str) -> ScenarioDocument:
             step_id, MappingProxyType(dict(generate)), MappingProxyType(dict(derive)),
             MappingProxyType(dict(write)), tuple(emissions), timedelta(seconds=seconds), transition,
         ))
-    return ScenarioDocument(1, scenario_id, reference, MappingProxyType(dict(initial)), tuple(steps))
+    return ScenarioDocument(1, scenario_id, reference, MappingProxyType(dict(initial)), tuple(steps),
+                            MappingProxyType(resources), validators, constraints)
 
 
 def parse_yaml_file(path: str | Path) -> ScenarioDocument:

@@ -61,13 +61,20 @@ def canonical_scenario_payload(
 ) -> Mapping[str, Any]:
     """Return the JSON-compatible semantic payload of a validated scenario."""
     document = _document(scenario)
-    return normalize({
+    payload = {
         "clock": {"start": document.reference_clock_start},
         "dsl_version": document.dsl_version,
         "initial_state": document.initial_state,
         "scenario": document.scenario_id,
         "steps": [_step_payload(step) for step in document.steps],
-    })
+    }
+    if document.resources:
+        payload["resources"] = _canonical_node(document.resources)
+    if document.validators:
+        payload["validators"] = _canonical_node(document.validators)
+    if document.constraints:
+        payload["constraints"] = _canonical_node(document.constraints)
+    return normalize(payload)
 
 
 def canonical_scenario_bytes(

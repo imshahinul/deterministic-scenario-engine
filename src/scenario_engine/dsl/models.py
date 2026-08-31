@@ -30,6 +30,9 @@ class ScenarioDocument:
     reference_clock_start: datetime
     initial_state: Mapping[str, Any]
     steps: tuple[StepDocument, ...]
+    resources: Mapping[str, Any] = MappingProxyType({})
+    validators: tuple[Mapping[str, Any], ...] = ()
+    constraints: tuple[Mapping[str, Any], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,3 +53,4 @@ class CompiledScenario:
     steps: tuple[CompiledStep, ...]
     start_step: str
     document: ScenarioDocument
+    resources: Any = None

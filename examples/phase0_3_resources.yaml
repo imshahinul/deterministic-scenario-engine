@@ -1,0 +1,57 @@
+dsl_version: 1
+scenario: resource-checkout
+clock:
+  start: "2026-01-01T12:00:00Z"
+initial_state:
+  orders: []
+resources:
+  customer:
+    id:
+      $input: customer_id
+  pricing:
+    unit_price:
+      $decimal: "19.95"
+    minimum: 1
+    maximum:
+      $input: maximum_quantity
+  checkout:
+    customer_id:
+      $ref: customer.id
+    unit_price:
+      $ref: pricing.unit_price
+validators:
+  - id: customer_id_type
+    resource: customer.id
+    kind: type
+    type: string
+  - id: maximum_range
+    resource: pricing.maximum
+    kind: range
+    min: 1
+    max: 100
+constraints:
+  - id: minimum_not_above_maximum
+    check:
+      $lte:
+        - $resource: pricing.minimum
+        - $resource: pricing.maximum
+steps:
+  - id: checkout
+    generate:
+      order_id:
+        $id: order
+    write:
+      customer_id:
+        $resource: checkout.customer_id
+      unit_price:
+        $resource: checkout.unit_price
+      order_id:
+        $local: order_id
+    emit:
+      - type: order_created
+        fields:
+          customer_id:
+            $resource: checkout.customer_id
+          order_id:
+            $state: order_id
+    transition: null

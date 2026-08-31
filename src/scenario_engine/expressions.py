@@ -4,6 +4,12 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Mapping
 
+from .values import canonical_bytes
+
+
+class ExpressionEvaluationError(ValueError):
+    pass
+
 
 @dataclass(frozen=True, slots=True)
 class EvaluationEnvironment:
@@ -66,6 +72,113 @@ class Add(Binary):
 class Multiply(Binary):
     def evaluate(self, env: EvaluationEnvironment) -> Any:
         return self.left.evaluate(env) * self.right.evaluate(env)
+
+
+def _numeric(value: Any) -> bool:
+    return not isinstance(value, bool) and isinstance(value, (int, Decimal))
+
+
+class Subtract(Binary):
+    def evaluate(self, env: EvaluationEnvironment) -> Any:
+        left, right = self.left.evaluate(env), self.right.evaluate(env)
+        if not _numeric(left) or not _numeric(right):
+            raise ExpressionEvaluationError("$sub operands must be integer or decimal")
+        if isinstance(left, Decimal) or isinstance(right, Decimal):
+            return Decimal(left) - Decimal(right)
+        return left - right
+
+
+class Divide(Binary):
+    def evaluate(self, env: EvaluationEnvironment) -> Decimal:
+        left, right = self.left.evaluate(env), self.right.evaluate(env)
+        if not _numeric(left) or not _numeric(right):
+            raise ExpressionEvaluationError("$div operands must be integer or decimal")
+        if right == 0:
+            raise ExpressionEvaluationError("$div division by zero")
+        return Decimal(left) / Decimal(right)
+
+
+class Equal(Binary):
+    def evaluate(self, env: EvaluationEnvironment) -> bool:
+        return canonical_bytes(self.left.evaluate(env)) == canonical_bytes(self.right.evaluate(env))
+
+
+class NotEqual(Equal):
+    def evaluate(self, env: EvaluationEnvironment) -> bool:
+        return not super().evaluate(env)
+
+
+def _ordered(left: Any, right: Any) -> tuple[Any, Any]:
+    from datetime import datetime
+    if _numeric(left) and _numeric(right):
+        return (Decimal(left), Decimal(right))
+    if isinstance(left, str) and isinstance(right, str):
+        return left, right
+    if isinstance(left, datetime) and isinstance(right, datetime):
+        if left.tzinfo is None or right.tzinfo is None:
+            raise ExpressionEvaluationError("ordering datetimes must be timezone-aware")
+        return left, right
+    raise ExpressionEvaluationError("ordering operands have incompatible semantic types")
+
+
+class LessThan(Binary):
+    def evaluate(self, env: EvaluationEnvironment) -> bool:
+        return _ordered(self.left.evaluate(env), self.right.evaluate(env))[0] < _ordered(self.left.evaluate(env), self.right.evaluate(env))[1]
+
+
+class LessThanOrEqual(Binary):
+    def evaluate(self, env: EvaluationEnvironment) -> bool:
+        left, right = _ordered(self.left.evaluate(env), self.right.evaluate(env)); return left <= right
+
+
+class GreaterThan(Binary):
+    def evaluate(self, env: EvaluationEnvironment) -> bool:
+        left, right = _ordered(self.left.evaluate(env), self.right.evaluate(env)); return left > right
+
+
+class GreaterThanOrEqual(Binary):
+    def evaluate(self, env: EvaluationEnvironment) -> bool:
+        left, right = _ordered(self.left.evaluate(env), self.right.evaluate(env)); return left >= right
+
+
+@dataclass(frozen=True, slots=True)
+class BooleanMany(Expression):
+    operands: tuple[Expression, ...]
+    use_and: bool
+    def evaluate(self, env: EvaluationEnvironment) -> bool:
+        result = True if self.use_and else False
+        for operand in self.operands:
+            value = operand.evaluate(env)
+            if type(value) is not bool:
+                raise ExpressionEvaluationError("boolean operator operands must be boolean")
+            result = result and value if self.use_and else result or value
+        return result
+    def dependencies(self) -> frozenset[str]:
+        return frozenset().union(*(operand.dependencies() for operand in self.operands))
+
+
+@dataclass(frozen=True, slots=True)
+class BooleanNot(Expression):
+    operand: Expression
+    def evaluate(self, env: EvaluationEnvironment) -> bool:
+        value = self.operand.evaluate(env)
+        if type(value) is not bool:
+            raise ExpressionEvaluationError("$not operand must be boolean")
+        return not value
+    def dependencies(self) -> frozenset[str]:
+        return self.operand.dependencies()
+
+
+@dataclass(frozen=True, slots=True)
+class Length(Expression):
+    operand: Expression
+    def evaluate(self, env: EvaluationEnvironment) -> int:
+        value = self.operand.evaluate(env)
+        if not isinstance(value, (str, list, tuple, Mapping)):
+            raise ExpressionEvaluationError("$len operand must be string, list, or map")
+        return len(value)
+    def dependencies(self) -> frozenset[str]:
+        return self.operand.dependencies()
 
 
 @dataclass(frozen=True, slots=True)

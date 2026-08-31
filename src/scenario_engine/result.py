@@ -29,6 +29,7 @@ class ScenarioResult:
     scenario_id: str
     runner: ScenarioRunner = field(compare=False, repr=False)
     manifest: ReproducibilityManifest
+    resources: Any = field(default=None, compare=False, repr=False)
     _normalized_snapshot: Mapping[str, Any] = field(init=False, compare=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -57,6 +58,10 @@ class ScenarioResult:
     @property
     def history(self) -> Any:
         return self.runner.history
+
+    @property
+    def resolved_resources(self) -> Any:
+        return self.resources
 
     @property
     def artifacts(self) -> tuple[Any, ...]:

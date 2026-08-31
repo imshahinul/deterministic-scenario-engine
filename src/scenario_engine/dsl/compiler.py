@@ -7,8 +7,9 @@ from typing import Any, Mapping
 from scenario_engine.artifacts import GeneratedArtifact
 from scenario_engine.context import GenerationContext
 from scenario_engine.expressions import (
-    Add, Append, DerivedRef, Expression, Literal, LocalRef, Multiply, Record,
-    StateRef, SumField,
+    Add, Append, BooleanMany, BooleanNot, DerivedRef, Divide, Equal, Expression,
+    GreaterThan, GreaterThanOrEqual, Length, LessThan, LessThanOrEqual, Literal,
+    LocalRef, Multiply, NotEqual, Record, StateRef, Subtract, SumField,
 )
 from scenario_engine.runner import StepSpec
 
@@ -42,7 +43,7 @@ class IntegerGenerator:
         return context.rng().inclusive_int(self.minimum, self.maximum)
 
 
-def _expression(node: Mapping[str, Any]) -> Expression:
+def _expression(node: Mapping[str, Any], resources=None) -> Expression:
     operator, payload = next(iter(node.items()))
     if operator == "$state":
         return StateRef(payload)
@@ -52,16 +53,29 @@ def _expression(node: Mapping[str, Any]) -> Expression:
         return DerivedRef(payload)
     if operator == "$literal":
         return Literal(decode_semantic_value(payload))
+    if operator == "$resource":
+        if resources is None:
+            return Literal(payload)  # replaced before execution during preparation
+        return Literal(resources.lookup(payload))
     if operator == "$add":
-        return Add(_expression(payload[0]), _expression(payload[1]))
+        return Add(_expression(payload[0], resources), _expression(payload[1], resources))
     if operator == "$mul":
-        return Multiply(_expression(payload[0]), _expression(payload[1]))
+        return Multiply(_expression(payload[0], resources), _expression(payload[1], resources))
+    binary = {"$sub": Subtract, "$div": Divide, "$eq": Equal, "$ne": NotEqual,
+              "$lt": LessThan, "$lte": LessThanOrEqual, "$gt": GreaterThan,
+              "$gte": GreaterThanOrEqual}
+    if operator in binary:
+        return binary[operator](_expression(payload[0], resources), _expression(payload[1], resources))
+    if operator in {"$and", "$or"}:
+        return BooleanMany(tuple(_expression(child, resources) for child in payload), operator == "$and")
+    if operator == "$not": return BooleanNot(_expression(payload, resources))
+    if operator == "$len": return Length(_expression(payload, resources))
     if operator == "$append":
-        return Append(_expression(payload["list"]), _expression(payload["value"]))
+        return Append(_expression(payload["list"], resources), _expression(payload["value"], resources))
     if operator == "$object":
-        return Record(MappingProxyType({name: _expression(child) for name, child in payload.items()}))
+        return Record(MappingProxyType({name: _expression(child, resources) for name, child in payload.items()}))
     if operator == "$sum_field":
-        return SumField(_expression(payload["source"]), payload["field"])
+        return SumField(_expression(payload["source"], resources), payload["field"])
     raise AssertionError("validated expression operator was not compiled")
 
 
@@ -76,9 +90,9 @@ def _generator(node: Mapping[str, Any]) -> Any:
     raise AssertionError("validated generator operator was not compiled")
 
 
-def _emitter(declarations: tuple[Mapping[str, Any], ...]):
+def _emitter(declarations: tuple[Mapping[str, Any], ...], resources=None):
     compiled = tuple((declaration["type"], {
-        name: _expression(node) for name, node in declaration["fields"].items()
+        name: _expression(node, resources) for name, node in declaration["fields"].items()
     }) for declaration in declarations)
 
     def emit(context, post_state, locals_, derived):
@@ -98,7 +112,7 @@ def _emitter(declarations: tuple[Mapping[str, Any], ...]):
     return emit
 
 
-def compile_document(document: ScenarioDocument) -> CompiledScenario:
+def compile_document(document: ScenarioDocument, resources=None) -> CompiledScenario:
     ids = [step.step_id for step in document.steps]
     known = set(ids)
     for index, step in enumerate(document.steps):
@@ -121,14 +135,18 @@ def compile_document(document: ScenarioDocument) -> CompiledScenario:
         spec = StepSpec(
             step.step_id,
             MappingProxyType({name: _generator(node) for name, node in step.generate.items()}),
-            MappingProxyType({name: _expression(node) for name, node in step.derive.items()}),
-            MappingProxyType({name: _expression(node) for name, node in step.write.items()}),
+            MappingProxyType({name: _expression(node, resources) for name, node in step.derive.items()}),
+            MappingProxyType({name: _expression(node, resources) for name, node in step.write.items()}),
             step.advance,
-            emit=_emitter(step.emit),
+            emit=_emitter(step.emit, resources),
             transition=lambda state, target=transition: target,
         )
         compiled.append(CompiledStep(spec, transition))
     return CompiledScenario(
         document.scenario_id, document.reference_clock_start, document.initial_state,
-        tuple(compiled), compiled[0].step_id, document,
+        tuple(compiled), compiled[0].step_id, document, resources,
     )
+
+
+def compile_constraint(node: Mapping[str, Any], resources) -> Expression:
+    return _expression(node, resources)

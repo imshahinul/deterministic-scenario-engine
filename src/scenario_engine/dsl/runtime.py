@@ -10,10 +10,11 @@ from scenario_engine.manifest import (
 )
 from scenario_engine.result import ScenarioResult
 from scenario_engine.rng import RNG_VERSION
+from scenario_engine.resources import ResolvedResources, resolve_resources
 from scenario_engine.runner import ScenarioRunner
 from scenario_engine.state import ScenarioState
 
-from .compiler import compile_document
+from .compiler import compile_constraint, compile_document
 from .errors import DSLCompilationError
 from .models import CompiledScenario
 from .parser import parse_yaml
@@ -24,9 +25,21 @@ def run_scenario(
     root_seed: str | int,
     run_index: int = 0,
     locale: str = "C",
+    inputs=None,
 ) -> ScenarioResult:
     if isinstance(run_index, bool) or not isinstance(run_index, int) or run_index < 0:
         raise ValueError("run_index must be a nonnegative integer")
+    resources = scenario.resources
+    if resources is None:
+        resources = resolve_resources(scenario.document.resources, inputs)
+        from scenario_engine.validation import evaluate_constraints, validate_resources
+        validate_resources(resources, scenario.document.validators)
+        constraints = tuple((item["id"], compile_constraint(item["check"], resources), item.get("message"))
+                            for item in scenario.document.constraints)
+        evaluate_constraints(constraints)
+        scenario = compile_document(scenario.document, resources)
+    elif inputs is not None:
+        raise ValueError("inputs must be supplied before compilation or to an unresolved scenario")
     runner = ScenarioRunner(
         root_seed,
         ExecutionAddress(scenario.scenario_id, run_index),
@@ -57,12 +70,20 @@ def run_scenario(
         locale=locale,
         reference_clock_start=scenario.reference_clock_start,
         run_index=run_index,
+        input_resource_hashes=resources.hashes(),
     )
-    return ScenarioResult(scenario.scenario_id, runner, manifest)
+    return ScenarioResult(scenario.scenario_id, runner, manifest, resources)
 
 
-def replay_scenario(yaml_text: str, manifest: ReproducibilityManifest) -> ScenarioResult:
-    scenario = compile_document(parse_yaml(yaml_text))
+def replay_scenario(yaml_text: str, manifest: ReproducibilityManifest, *, inputs=None) -> ScenarioResult:
+    document = parse_yaml(yaml_text)
+    resources = resolve_resources(document.resources, inputs)
+    from scenario_engine.validation import evaluate_constraints, validate_resources
+    validate_resources(resources, document.validators)
+    constraints = tuple((item["id"], compile_constraint(item["check"], resources), item.get("message"))
+                        for item in document.constraints)
+    evaluate_constraints(constraints)
+    scenario = compile_document(document, resources)
     expected = {
         "scenario_canonical_hash": canonical_scenario_hash(scenario),
         "engine_version": ENGINE_VERSION,
@@ -75,8 +96,8 @@ def replay_scenario(yaml_text: str, manifest: ReproducibilityManifest) -> Scenar
     for field_name, current in expected.items():
         if getattr(manifest, field_name) != current:
             raise ReplayCompatibilityError(f"{field_name} mismatch")
-    if manifest.input_resource_hashes:
-        raise ReplayCompatibilityError("input_resource_hashes unsupported in Phase 0.2A")
+    if manifest.input_resource_hashes != resources.hashes():
+        raise ReplayCompatibilityError("input_resource_hashes mismatch")
     if manifest.domain_pack_versions:
         raise ReplayCompatibilityError("domain_pack_versions unsupported in Phase 0.2A")
     return run_scenario(

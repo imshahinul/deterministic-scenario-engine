@@ -21,9 +21,10 @@ class ScenarioHarness:
         root_seed: str | int,
         run_index: int = 0,
         locale: str = "C",
+        inputs=None,
     ) -> ScenarioResult:
         scenario = compile_document(parse_yaml(yaml_text))
-        return run_scenario(scenario, root_seed, run_index, locale)
+        return run_scenario(scenario, root_seed, run_index, locale, inputs)
 
     def run_file(
         self,
@@ -32,27 +33,33 @@ class ScenarioHarness:
         root_seed: str | int,
         run_index: int = 0,
         locale: str = "C",
+        inputs=None,
     ) -> ScenarioResult:
         return self.run_text(
             Path(path).read_text(encoding="utf-8"),
             root_seed=root_seed,
             run_index=run_index,
             locale=locale,
+            inputs=inputs,
         )
 
     def replay_text(
         self,
         yaml_text: str,
         manifest: ReproducibilityManifest,
+        *,
+        inputs=None,
     ) -> ScenarioResult:
-        return replay_scenario(yaml_text, manifest)
+        return replay_scenario(yaml_text, manifest, inputs=inputs)
 
     def replay_file(
         self,
         path: str | Path,
         manifest: ReproducibilityManifest,
+        *,
+        inputs=None,
     ) -> ScenarioResult:
-        return self.replay_text(Path(path).read_text(encoding="utf-8"), manifest)
+        return self.replay_text(Path(path).read_text(encoding="utf-8"), manifest, inputs=inputs)
 
 
 @pytest.fixture
