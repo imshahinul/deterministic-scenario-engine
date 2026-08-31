@@ -130,5 +130,5 @@ def compile_document(document: ScenarioDocument) -> CompiledScenario:
         compiled.append(CompiledStep(spec, transition))
     return CompiledScenario(
         document.scenario_id, document.reference_clock_start, document.initial_state,
-        tuple(compiled), compiled[0].step_id,
+        tuple(compiled), compiled[0].step_id, document,
     )

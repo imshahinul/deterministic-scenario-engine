@@ -49,3 +49,4 @@ class CompiledScenario:
     initial_state: Mapping[str, Any]
     steps: tuple[CompiledStep, ...]
     start_step: str
+    document: ScenarioDocument

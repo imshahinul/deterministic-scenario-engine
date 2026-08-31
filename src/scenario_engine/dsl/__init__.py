@@ -7,11 +7,11 @@ from .errors import (
 )
 from .models import CompiledScenario, ScenarioDocument
 from .parser import decode_semantic_value, parse_yaml, parse_yaml_file
-from .runtime import ScenarioResult, run_scenario
+from .runtime import ScenarioResult, replay_scenario, run_scenario
 
 __all__ = [
     "CompiledScenario", "DSLCompilationError", "DSLError", "DSLParseError",
     "DSLSchemaError", "ScenarioDocument", "ScenarioResult",
     "UnsupportedDSLVersionError", "compile_document", "decode_semantic_value",
-    "parse_yaml", "parse_yaml_file", "run_scenario",
+    "parse_yaml", "parse_yaml_file", "replay_scenario", "run_scenario",
 ]
