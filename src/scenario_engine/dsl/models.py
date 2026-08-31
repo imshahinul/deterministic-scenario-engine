@@ -21,6 +21,19 @@ class StepDocument:
     emit: tuple[Mapping[str, Any], ...]
     advance: timedelta
     transition: str | None
+    call: Mapping[str, Any] | None = None
+    branch: Mapping[str, Any] | None = None
+    repeat: Mapping[str, Any] | None = None
+
+    @property
+    def control_kind(self) -> str | None:
+        if self.call is not None:
+            return "call"
+        if self.branch is not None:
+            return "branch"
+        if self.repeat is not None:
+            return "repeat"
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +46,7 @@ class ScenarioDocument:
     resources: Mapping[str, Any] = MappingProxyType({})
     validators: tuple[Mapping[str, Any], ...] = ()
     constraints: tuple[Mapping[str, Any], ...] = ()
+    subflows: Mapping[str, tuple[StepDocument, ...]] = MappingProxyType({})
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,3 +68,4 @@ class CompiledScenario:
     start_step: str
     document: ScenarioDocument
     resources: Any = None
+    subflows: Mapping[str, tuple[CompiledStep | StepDocument, ...]] = MappingProxyType({})

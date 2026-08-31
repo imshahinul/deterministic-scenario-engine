@@ -9,9 +9,10 @@ from scenario_engine.context import GenerationContext
 from scenario_engine.expressions import (
     Add, Append, BooleanMany, BooleanNot, DerivedRef, Divide, Equal, Expression,
     GreaterThan, GreaterThanOrEqual, Length, LessThan, LessThanOrEqual, Literal,
-    LocalRef, Multiply, NotEqual, Record, StateRef, Subtract, SumField,
+    LocalRef, Multiply, NotEqual, Record, ScopeRef, StateRef, Subtract, SumField,
 )
 from scenario_engine.runner import StepSpec
+from scenario_engine.expressions import resolve_semantic_path
 
 from .errors import DSLCompilationError
 from .models import CompiledScenario, CompiledStep, ScenarioDocument
@@ -43,7 +44,7 @@ class IntegerGenerator:
         return context.rng().inclusive_int(self.minimum, self.maximum)
 
 
-def _expression(node: Mapping[str, Any], resources=None) -> Expression:
+def _expression(node: Mapping[str, Any], resources=None, scope=None) -> Expression:
     operator, payload = next(iter(node.items()))
     if operator == "$state":
         return StateRef(payload)
@@ -57,25 +58,27 @@ def _expression(node: Mapping[str, Any], resources=None) -> Expression:
         if resources is None:
             return Literal(payload)  # replaced before execution during preparation
         return Literal(resources.lookup(payload))
+    if operator == "$scope":
+        return ScopeRef(payload) if scope is None else Literal(resolve_semantic_path(scope, payload))
     if operator == "$add":
-        return Add(_expression(payload[0], resources), _expression(payload[1], resources))
+        return Add(_expression(payload[0], resources, scope), _expression(payload[1], resources, scope))
     if operator == "$mul":
-        return Multiply(_expression(payload[0], resources), _expression(payload[1], resources))
+        return Multiply(_expression(payload[0], resources, scope), _expression(payload[1], resources, scope))
     binary = {"$sub": Subtract, "$div": Divide, "$eq": Equal, "$ne": NotEqual,
               "$lt": LessThan, "$lte": LessThanOrEqual, "$gt": GreaterThan,
               "$gte": GreaterThanOrEqual}
     if operator in binary:
-        return binary[operator](_expression(payload[0], resources), _expression(payload[1], resources))
+        return binary[operator](_expression(payload[0], resources, scope), _expression(payload[1], resources, scope))
     if operator in {"$and", "$or"}:
-        return BooleanMany(tuple(_expression(child, resources) for child in payload), operator == "$and")
-    if operator == "$not": return BooleanNot(_expression(payload, resources))
-    if operator == "$len": return Length(_expression(payload, resources))
+        return BooleanMany(tuple(_expression(child, resources, scope) for child in payload), operator == "$and")
+    if operator == "$not": return BooleanNot(_expression(payload, resources, scope))
+    if operator == "$len": return Length(_expression(payload, resources, scope))
     if operator == "$append":
-        return Append(_expression(payload["list"], resources), _expression(payload["value"], resources))
+        return Append(_expression(payload["list"], resources, scope), _expression(payload["value"], resources, scope))
     if operator == "$object":
-        return Record(MappingProxyType({name: _expression(child, resources) for name, child in payload.items()}))
+        return Record(MappingProxyType({name: _expression(child, resources, scope) for name, child in payload.items()}))
     if operator == "$sum_field":
-        return SumField(_expression(payload["source"], resources), payload["field"])
+        return SumField(_expression(payload["source"], resources, scope), payload["field"])
     raise AssertionError("validated expression operator was not compiled")
 
 
@@ -90,9 +93,9 @@ def _generator(node: Mapping[str, Any]) -> Any:
     raise AssertionError("validated generator operator was not compiled")
 
 
-def _emitter(declarations: tuple[Mapping[str, Any], ...], resources=None):
+def _emitter(declarations: tuple[Mapping[str, Any], ...], resources=None, scope=None):
     compiled = tuple((declaration["type"], {
-        name: _expression(node, resources) for name, node in declaration["fields"].items()
+        name: _expression(node, resources, scope) for name, node in declaration["fields"].items()
     }) for declaration in declarations)
 
     def emit(context, post_state, locals_, derived):
@@ -112,14 +115,14 @@ def _emitter(declarations: tuple[Mapping[str, Any], ...], resources=None):
     return emit
 
 
-def compile_document(document: ScenarioDocument, resources=None) -> CompiledScenario:
-    ids = [step.step_id for step in document.steps]
+def _validate_sequence(steps, path):
+    ids = [step.step_id for step in steps]
     known = set(ids)
-    for index, step in enumerate(document.steps):
+    for index, step in enumerate(steps):
         expected = ids[index + 1] if index + 1 < len(ids) else None
         if step.transition is not None and step.transition not in known:
             raise DSLCompilationError(
-                f"$.steps[{index}].transition: unknown step ID {step.transition}"
+                f"{path}[{index}].transition: unknown node ID {step.transition}"
             )
         if step.transition != expected:
             if expected is None:
@@ -128,25 +131,74 @@ def compile_document(document: ScenarioDocument, resources=None) -> CompiledScen
                 message = f"non-final step transition must be {expected}"
             else:
                 message = f"linear transition must target immediately following step {expected}"
-            raise DSLCompilationError(f"$.steps[{index}].transition: {message}")
-    compiled: list[CompiledStep] = []
+            raise DSLCompilationError(f"{path}[{index}].transition: {message}")
+
+
+def _targets(step):
+    if step.call is not None: return (step.call["subflow"],)
+    if step.repeat is not None: return (step.repeat["subflow"],)
+    if step.branch is not None:
+        result = [case["subflow"] for case in step.branch["cases"]]
+        if "else" in step.branch: result.append(step.branch["else"]["subflow"])
+        return tuple(result)
+    return ()
+
+
+def _validate_control(document):
+    from scenario_engine.control_flow import SubflowCycleError, UnknownSubflowError
+    known = set(document.subflows)
+    for sequence_name, steps in (("$", document.steps), *sorted(document.subflows.items())):
+        for step in steps:
+            for target in _targets(step):
+                if target not in known: raise UnknownSubflowError(f"{step.step_id}: unknown subflow {target}")
+    graph = {name: sorted({target for step in steps for target in _targets(step)}) for name, steps in document.subflows.items()}
+    visiting, complete = [], set()
+    def visit(name):
+        if name in visiting:
+            cycle = visiting[visiting.index(name):] + [name]
+            raise SubflowCycleError("subflow call cycle: " + " -> ".join(cycle))
+        if name in complete: return
+        visiting.append(name)
+        for child in graph[name]: visit(child)
+        visiting.pop(); complete.add(name)
+    for name in sorted(graph): visit(name)
+
+
+def _compile_step(step, resources, scope=None):
+    if step.control_kind is not None:
+        return step
+    transition = step.transition
+    spec = StepSpec(
+        step.step_id,
+        MappingProxyType({name: _generator(node) for name, node in step.generate.items()}),
+        MappingProxyType({name: _expression(node, resources, scope) for name, node in step.derive.items()}),
+        MappingProxyType({name: _expression(node, resources, scope) for name, node in step.write.items()}),
+        step.advance, emit=_emitter(step.emit, resources, scope), transition=lambda state, target=transition: target,
+    )
+    return CompiledStep(spec, transition)
+
+
+def compile_document(document: ScenarioDocument, resources=None) -> CompiledScenario:
+    _validate_sequence(document.steps, "$.steps")
+    for name, steps in document.subflows.items(): _validate_sequence(steps, f"$.subflows.{name}.steps")
+    _validate_control(document)
+    compiled: list[Any] = []
     for step in document.steps:
-        transition = step.transition
-        spec = StepSpec(
-            step.step_id,
-            MappingProxyType({name: _generator(node) for name, node in step.generate.items()}),
-            MappingProxyType({name: _expression(node, resources) for name, node in step.derive.items()}),
-            MappingProxyType({name: _expression(node, resources) for name, node in step.write.items()}),
-            step.advance,
-            emit=_emitter(step.emit, resources),
-            transition=lambda state, target=transition: target,
-        )
-        compiled.append(CompiledStep(spec, transition))
+        compiled.append(_compile_step(step, resources))
+    subflows = MappingProxyType({name: tuple(_compile_step(step, resources) for step in steps) for name, steps in document.subflows.items()})
     return CompiledScenario(
         document.scenario_id, document.reference_clock_start, document.initial_state,
-        tuple(compiled), compiled[0].step_id, document, resources,
+        tuple(compiled), compiled[0].step_id, document, resources, subflows,
     )
 
 
 def compile_constraint(node: Mapping[str, Any], resources) -> Expression:
     return _expression(node, resources)
+
+
+def compile_expression(node: Mapping[str, Any], resources) -> Expression:
+    return _expression(node, resources)
+
+
+def compile_scoped_sequence(steps, resources, scope):
+    return tuple(_compile_step(step, resources, scope) for step in steps)

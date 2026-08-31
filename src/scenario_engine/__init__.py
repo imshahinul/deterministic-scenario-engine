@@ -1,6 +1,7 @@
 """Executable semantic kernel for the Phase 0.1A spike."""
 
 from .address import ExecutionAddress
+from .control_flow import MAX_REPEAT_COUNT
 from .artifacts import GeneratedArtifact
 from .clock import LogicalClock
 from .canonical import (
@@ -26,4 +27,5 @@ __all__ = [
     "ScenarioResult", "ScenarioRunner", "ScenarioState", "StepSpec",
     "ENGINE_VERSION", "canonical_bytes", "canonical_scenario_bytes",
     "canonical_scenario_hash", "canonical_scenario_payload", "fingerprint", "normalize",
+    "MAX_REPEAT_COUNT",
 ]

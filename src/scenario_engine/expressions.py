@@ -7,8 +7,31 @@ from typing import Any, Mapping
 from .values import canonical_bytes
 
 
+def _mutable(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _mutable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_mutable(item) for item in value]
+    return value
+
+
 class ExpressionEvaluationError(ValueError):
     pass
+
+
+class ScopeResolutionError(ExpressionEvaluationError):
+    """A scoped expression could not be resolved in the active invocation."""
+
+
+def resolve_semantic_path(value: Mapping[str, Any] | None, path: str) -> Any:
+    if value is None:
+        raise ScopeResolutionError("$scope is unavailable outside a subflow invocation")
+    current: Any = value
+    for segment in path.split("."):
+        if not segment or not isinstance(current, Mapping) or segment not in current:
+            raise ScopeResolutionError(f"unknown $scope path {path}")
+        current = current[segment]
+    return current
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,6 +39,7 @@ class EvaluationEnvironment:
     pre_state: Mapping[str, Any]
     locals: Mapping[str, Any]
     derived: Mapping[str, Any]
+    scope: Mapping[str, Any] | None = None
 
 
 class Expression:
@@ -38,6 +62,13 @@ class StateRef(Expression):
     name: str
     def evaluate(self, env: EvaluationEnvironment) -> Any:
         return env.pre_state[self.name]
+
+
+@dataclass(frozen=True, slots=True)
+class ScopeRef(Expression):
+    path: str
+    def evaluate(self, env: EvaluationEnvironment) -> Any:
+        return resolve_semantic_path(env.scope, self.path)
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,7 +217,7 @@ class Append(Expression):
     sequence: Expression
     item: Expression
     def evaluate(self, env: EvaluationEnvironment) -> list[Any]:
-        return list(self.sequence.evaluate(env)) + [self.item.evaluate(env)]
+        return _mutable(self.sequence.evaluate(env)) + [_mutable(self.item.evaluate(env))]
     def dependencies(self) -> frozenset[str]:
         return self.sequence.dependencies() | self.item.dependencies()
 

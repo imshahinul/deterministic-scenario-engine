@@ -32,7 +32,7 @@ def _canonical_node(value: Any) -> Any:
 
 
 def _step_payload(step: StepDocument) -> Mapping[str, Any]:
-    return {
+    payload = {
         "advance": step.advance,
         "derive": _canonical_node(step.derive),
         "emit": _canonical_node(step.emit),
@@ -41,6 +41,10 @@ def _step_payload(step: StepDocument) -> Mapping[str, Any]:
         "transition": step.transition,
         "write": _canonical_node(step.write),
     }
+    if step.call is not None: payload["call"] = _canonical_node(step.call)
+    if step.branch is not None: payload["branch"] = _canonical_node(step.branch)
+    if step.repeat is not None: payload["repeat"] = _canonical_node(step.repeat)
+    return payload
 
 
 def _document(value: str | ScenarioDocument | CompiledScenario) -> ScenarioDocument:
@@ -74,6 +78,11 @@ def canonical_scenario_payload(
         payload["validators"] = _canonical_node(document.validators)
     if document.constraints:
         payload["constraints"] = _canonical_node(document.constraints)
+    if document.subflows:
+        payload["subflows"] = {
+            name: {"steps": [_step_payload(step) for step in document.subflows[name]]}
+            for name in sorted(document.subflows)
+        }
     return normalize(payload)
 
 

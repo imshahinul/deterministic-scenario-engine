@@ -15,12 +15,13 @@ from .models import ScenarioDocument, StepDocument
 
 
 _REQUIRED_TOP_KEYS = {"dsl_version", "scenario", "clock", "initial_state", "steps"}
-_TOP_KEYS = _REQUIRED_TOP_KEYS | {"resources", "validators", "constraints"}
+_TOP_KEYS = _REQUIRED_TOP_KEYS | {"resources", "validators", "constraints", "subflows"}
 _STEP_KEYS = {"id", "generate", "derive", "write", "emit", "advance", "transition"}
+_NODE_KEYS = _STEP_KEYS | {"call", "branch", "repeat"}
 _EXPRESSION_OPERATORS = {
     "$state", "$local", "$derived", "$literal", "$add", "$mul", "$append",
     "$object", "$sum_field", "$resource", "$sub", "$div", "$eq", "$ne",
-    "$lt", "$lte", "$gt", "$gte", "$and", "$or", "$not", "$len",
+    "$lt", "$lte", "$gt", "$gte", "$and", "$or", "$not", "$len", "$scope",
 }
 _GENERATOR_OPERATORS = {"$int", "$id", "$literal"}
 
@@ -108,7 +109,7 @@ def _symbol(value: Any, path: str) -> None:
 
 
 def _validate_expression(node: Any, path: str, *, emission: bool = False,
-                         constraint: bool = False) -> None:
+                         constraint: bool = False, control: bool = False) -> None:
     mapping = _mapping(node, path)
     if len(mapping) != 1:
         _fail(path, "expression must contain exactly one operator")
@@ -119,40 +120,44 @@ def _validate_expression(node: Any, path: str, *, emission: bool = False,
         _fail(path, f"{operator} is not allowed in emission fields")
     if constraint and operator in {"$state", "$local", "$derived"}:
         _fail(path, f"{operator} is not allowed in constraints")
-    if operator in {"$state", "$local", "$derived", "$resource"}:
+    if control and operator in {"$local", "$derived"}:
+        _fail(path, f"{operator} is not allowed at a control boundary")
+    if operator in {"$state", "$local", "$derived", "$resource", "$scope"}:
         _symbol(payload, path + "." + operator)
+        if operator == "$scope" and any(not segment for segment in payload.split(".")):
+            _fail(path + ".$scope", "invalid dot-separated path")
     elif operator == "$literal":
         decode_semantic_value(payload, path + ".$literal")
     elif operator in {"$add", "$mul", "$sub", "$div", "$eq", "$ne", "$lt", "$lte", "$gt", "$gte"}:
         if not isinstance(payload, list) or len(payload) != 2:
             _fail(path + "." + operator, "expected exactly two expressions")
         for index, child in enumerate(payload):
-            _validate_expression(child, f"{path}.{operator}[{index}]", emission=emission, constraint=constraint)
+            _validate_expression(child, f"{path}.{operator}[{index}]", emission=emission, constraint=constraint, control=control)
     elif operator in {"$and", "$or"}:
         if not isinstance(payload, list) or not payload:
             _fail(path + "." + operator, "expected one or more expressions")
         for index, child in enumerate(payload):
-            _validate_expression(child, f"{path}.{operator}[{index}]", constraint=constraint)
+            _validate_expression(child, f"{path}.{operator}[{index}]", constraint=constraint, control=control)
     elif operator in {"$not", "$len"}:
-        _validate_expression(payload, path + "." + operator, constraint=constraint)
+        _validate_expression(payload, path + "." + operator, constraint=constraint, control=control)
     elif operator == "$append":
         body = _mapping(payload, path + ".$append")
         _only_keys(body, {"list", "value"}, path + ".$append")
         if set(body) != {"list", "value"}:
             _fail(path + ".$append", "list and value are required")
-        _validate_expression(body["list"], path + ".$append.list", emission=emission)
-        _validate_expression(body["value"], path + ".$append.value", emission=emission)
+        _validate_expression(body["list"], path + ".$append.list", emission=emission, control=control)
+        _validate_expression(body["value"], path + ".$append.value", emission=emission, control=control)
     elif operator == "$object":
         body = _mapping(payload, path + ".$object")
         for name, child in body.items():
             _symbol(name, path + ".$object key")
-            _validate_expression(child, f"{path}.$object.{name}", emission=emission)
+            _validate_expression(child, f"{path}.$object.{name}", emission=emission, control=control)
     elif operator == "$sum_field":
         body = _mapping(payload, path + ".$sum_field")
         _only_keys(body, {"source", "field"}, path + ".$sum_field")
         if set(body) != {"source", "field"}:
             _fail(path + ".$sum_field", "source and field are required")
-        _validate_expression(body["source"], path + ".$sum_field.source", emission=emission)
+        _validate_expression(body["source"], path + ".$sum_field.source", emission=emission, control=control)
         _symbol(body["field"], path + ".$sum_field.field")
 
 
@@ -250,6 +255,111 @@ def _parse_constraints(value: Any) -> tuple[Mapping[str, Any], ...]:
     return tuple(result)
 
 
+def _with(value: Any, path: str) -> Mapping[str, Any]:
+    bindings = _mapping(value, path)
+    for name, expression in bindings.items():
+        _symbol(name, path + " key")
+        _validate_expression(expression, f"{path}.{name}", control=True)
+    return MappingProxyType(dict(bindings))
+
+
+def _target(value: Any, path: str) -> Mapping[str, Any]:
+    target = _mapping(value, path)
+    _only_keys(target, {"subflow", "with"}, path)
+    if "subflow" not in target:
+        _fail(path, "subflow is required")
+    _symbol(target["subflow"], path + ".subflow")
+    return MappingProxyType({"subflow": target["subflow"], "with": _with(target.get("with", {}), path + ".with")})
+
+
+def _parse_node(raw: Any, path: str, seen: set[str]) -> StepDocument:
+    node = _mapping(raw, path)
+    _only_keys(node, _NODE_KEYS, path)
+    if "id" not in node or "transition" not in node:
+        _fail(path, "id and transition are required")
+    step_id = node["id"]
+    _symbol(step_id, path + ".id")
+    if step_id in seen:
+        _fail(path + ".id", f"duplicate step ID {step_id} (global node ID)")
+    seen.add(step_id)
+    controls = [kind for kind in ("call", "branch", "repeat") if kind in node]
+    executable = any(key in node for key in ("generate", "derive", "write", "emit", "advance"))
+    if len(controls) > 1 or (controls and executable):
+        _fail(path, "node must be exactly one executable, call, branch, or repeat node")
+    transition = node["transition"]
+    if transition is not None:
+        _symbol(transition, path + ".transition")
+    if controls:
+        kind = controls[0]
+        body = _mapping(node[kind], path + "." + kind)
+        if kind == "call":
+            parsed = _target(body, path + ".call")
+        elif kind == "branch":
+            _only_keys(body, {"cases", "else"}, path + ".branch")
+            cases_raw = body.get("cases")
+            if not isinstance(cases_raw, list) or not cases_raw:
+                _fail(path + ".branch.cases", "expected non-empty ordered list")
+            cases = []
+            for index, raw_case in enumerate(cases_raw):
+                case_path = f"{path}.branch.cases[{index}]"
+                case = _mapping(raw_case, case_path)
+                _only_keys(case, {"when", "subflow", "with"}, case_path)
+                if not {"when", "subflow"} <= set(case):
+                    _fail(case_path, "when and subflow are required")
+                _validate_expression(case["when"], case_path + ".when", control=True)
+                target = _target({key: case[key] for key in case if key != "when"}, case_path)
+                cases.append(MappingProxyType({"when": case["when"], **target}))
+            parsed_dict: dict[str, Any] = {"cases": tuple(cases)}
+            if "else" in body:
+                parsed_dict["else"] = _target(body["else"], path + ".branch.else")
+            parsed = MappingProxyType(parsed_dict)
+        else:
+            _only_keys(body, {"count", "max", "subflow", "with", "index_as"}, path + ".repeat")
+            if not {"count", "max", "subflow"} <= set(body):
+                _fail(path + ".repeat", "count, max, and subflow are required")
+            _validate_expression(body["count"], path + ".repeat.count", control=True)
+            maximum = body["max"]
+            if isinstance(maximum, bool) or not isinstance(maximum, int) or not 0 <= maximum <= 100:
+                _fail(path + ".repeat.max", "expected literal integer from 0 through 100")
+            target = _target({key: body[key] for key in ("subflow", "with") if key in body}, path + ".repeat")
+            parsed_dict = {"count": body["count"], "max": maximum, **target}
+            if "index_as" in body:
+                _symbol(body["index_as"], path + ".repeat.index_as")
+                if body["index_as"] in target["with"]:
+                    _fail(path + ".repeat.index_as", "collides with explicit with binding")
+                parsed_dict["index_as"] = body["index_as"]
+            parsed = MappingProxyType(parsed_dict)
+        empty = MappingProxyType({})
+        return StepDocument(step_id, empty, empty, empty, (), timedelta(0), transition,
+                            parsed if kind == "call" else None,
+                            parsed if kind == "branch" else None,
+                            parsed if kind == "repeat" else None)
+    generate = _mapping(node.get("generate", {}), path + ".generate")
+    derive = _mapping(node.get("derive", {}), path + ".derive")
+    write = _mapping(node.get("write", {}), path + ".write")
+    for section_name, section, validator in (("generate", generate, _validate_generator), ("derive", derive, _validate_expression), ("write", write, _validate_expression)):
+        for name, expression in section.items():
+            _symbol(name, f"{path}.{section_name} key")
+            validator(expression, f"{path}.{section_name}.{name}")
+    emit_raw = node.get("emit", [])
+    if not isinstance(emit_raw, list):
+        _fail(path + ".emit", "expected ordered list")
+    emissions = []
+    for index, raw_emission in enumerate(emit_raw):
+        emit_path = f"{path}.emit[{index}]"; emission = _mapping(raw_emission, emit_path)
+        _only_keys(emission, {"type", "fields"}, emit_path)
+        if set(emission) != {"type", "fields"}: _fail(emit_path, "type and fields are required")
+        _symbol(emission["type"], emit_path + ".type"); fields = _mapping(emission["fields"], emit_path + ".fields")
+        for name, expression in fields.items():
+            _symbol(name, emit_path + ".fields key"); _validate_expression(expression, f"{emit_path}.fields.{name}", emission=True)
+        emissions.append(MappingProxyType({"type": emission["type"], "fields": MappingProxyType(dict(fields))}))
+    advance = _mapping(node.get("advance", {"seconds": 0}), path + ".advance")
+    _only_keys(advance, {"seconds"}, path + ".advance")
+    seconds = advance.get("seconds")
+    if isinstance(seconds, bool) or not isinstance(seconds, int) or seconds < 0: _fail(path + ".advance.seconds", "expected nonnegative integer")
+    return StepDocument(step_id, MappingProxyType(dict(generate)), MappingProxyType(dict(derive)), MappingProxyType(dict(write)), tuple(emissions), timedelta(seconds=seconds), transition)
+
+
 def parse_yaml(text: str) -> ScenarioDocument:
     try:
         loaded = yaml.safe_load(text)
@@ -290,64 +400,21 @@ def parse_yaml(text: str) -> ScenarioDocument:
         _fail("$.constraints", "declared constraint list must be non-empty")
     constraints = _parse_constraints(root.get("constraints", []))
     steps_raw = root["steps"]
-    if not isinstance(steps_raw, list) or not steps_raw:
-        _fail("$.steps", "expected non-empty ordered list")
-    steps: list[StepDocument] = []
+    if not isinstance(steps_raw, list) or not steps_raw: _fail("$.steps", "expected non-empty ordered list")
     seen: set[str] = set()
-    for index, raw in enumerate(steps_raw):
-        path = f"$.steps[{index}]"
-        step = _mapping(raw, path)
-        _only_keys(step, _STEP_KEYS, path)
-        if "id" not in step or "transition" not in step:
-            _fail(path, "id and transition are required")
-        step_id = step["id"]
-        _symbol(step_id, path + ".id")
-        if step_id in seen:
-            _fail(path + ".id", f"duplicate step ID {step_id}")
-        seen.add(step_id)
-        generate = _mapping(step.get("generate", {}), path + ".generate")
-        derive = _mapping(step.get("derive", {}), path + ".derive")
-        write = _mapping(step.get("write", {}), path + ".write")
-        for section_name, section, validator in (
-            ("generate", generate, _validate_generator),
-            ("derive", derive, _validate_expression),
-            ("write", write, _validate_expression),
-        ):
-            for name, node in section.items():
-                _symbol(name, f"{path}.{section_name} key")
-                validator(node, f"{path}.{section_name}.{name}")
-        emit_raw = step.get("emit", [])
-        if not isinstance(emit_raw, list):
-            _fail(path + ".emit", "expected ordered list")
-        emissions: list[Mapping[str, Any]] = []
-        for emit_index, raw_emission in enumerate(emit_raw):
-            emit_path = f"{path}.emit[{emit_index}]"
-            emission = _mapping(raw_emission, emit_path)
-            _only_keys(emission, {"type", "fields"}, emit_path)
-            if set(emission) != {"type", "fields"}:
-                _fail(emit_path, "type and fields are required")
-            _symbol(emission["type"], emit_path + ".type")
-            fields = _mapping(emission["fields"], emit_path + ".fields")
-            for name, node in fields.items():
-                _symbol(name, emit_path + ".fields key")
-                _validate_expression(node, f"{emit_path}.fields.{name}", emission=True)
-            emissions.append(MappingProxyType({"type": emission["type"], "fields": MappingProxyType(dict(fields))}))
-        advance_raw = _mapping(step.get("advance", {"seconds": 0}), path + ".advance")
-        _only_keys(advance_raw, {"seconds"}, path + ".advance")
-        if set(advance_raw) != {"seconds"}:
-            _fail(path + ".advance", "seconds is required")
-        seconds = advance_raw["seconds"]
-        if isinstance(seconds, bool) or not isinstance(seconds, int) or seconds < 0:
-            _fail(path + ".advance.seconds", "expected nonnegative integer")
-        transition = step["transition"]
-        if transition is not None:
-            _symbol(transition, path + ".transition")
-        steps.append(StepDocument(
-            step_id, MappingProxyType(dict(generate)), MappingProxyType(dict(derive)),
-            MappingProxyType(dict(write)), tuple(emissions), timedelta(seconds=seconds), transition,
-        ))
+    steps = [_parse_node(raw, f"$.steps[{index}]", seen) for index, raw in enumerate(steps_raw)]
+    subflows_raw = _mapping(root.get("subflows", {}), "$.subflows")
+    if "subflows" in root and not subflows_raw: _fail("$.subflows", "declared subflow mapping must be non-empty")
+    subflows: dict[str, tuple[StepDocument, ...]] = {}
+    for name, raw_subflow in subflows_raw.items():
+        _symbol(name, "$.subflows key")
+        definition = _mapping(raw_subflow, f"$.subflows.{name}")
+        _only_keys(definition, {"steps"}, f"$.subflows.{name}")
+        body = definition.get("steps")
+        if not isinstance(body, list) or not body: _fail(f"$.subflows.{name}.steps", "expected non-empty ordered list")
+        subflows[name] = tuple(_parse_node(raw, f"$.subflows.{name}.steps[{index}]", seen) for index, raw in enumerate(body))
     return ScenarioDocument(1, scenario_id, reference, MappingProxyType(dict(initial)), tuple(steps),
-                            MappingProxyType(resources), validators, constraints)
+                            MappingProxyType(resources), validators, constraints, MappingProxyType(subflows))
 
 
 def parse_yaml_file(path: str | Path) -> ScenarioDocument:
