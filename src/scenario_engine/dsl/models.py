@@ -47,6 +47,9 @@ class ScenarioDocument:
     validators: tuple[Mapping[str, Any], ...] = ()
     constraints: tuple[Mapping[str, Any], ...] = ()
     subflows: Mapping[str, tuple[StepDocument, ...]] = MappingProxyType({})
+    invariants: tuple[Mapping[str, Any], ...] = ()
+    faults: tuple[Mapping[str, Any], ...] = ()
+    oracle: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)

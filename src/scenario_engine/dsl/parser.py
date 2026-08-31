@@ -15,7 +15,7 @@ from .models import ScenarioDocument, StepDocument
 
 
 _REQUIRED_TOP_KEYS = {"dsl_version", "scenario", "clock", "initial_state", "steps"}
-_TOP_KEYS = _REQUIRED_TOP_KEYS | {"resources", "validators", "constraints", "subflows"}
+_TOP_KEYS = _REQUIRED_TOP_KEYS | {"resources", "validators", "constraints", "subflows", "invariants", "faults", "oracle"}
 _STEP_KEYS = {"id", "generate", "derive", "write", "emit", "advance", "transition"}
 _NODE_KEYS = _STEP_KEYS | {"call", "branch", "repeat"}
 _EXPRESSION_OPERATORS = {
@@ -254,6 +254,79 @@ def _parse_constraints(value: Any) -> tuple[Mapping[str, Any], ...]:
         result.append(MappingProxyType(dict(item)))
     return tuple(result)
 
+def _parse_invariants(value):
+    if not isinstance(value, list): _fail("$.invariants", "expected ordered list")
+    result, seen = [], set()
+    for index, raw in enumerate(value):
+        path=f"$.invariants[{index}]"; item=_mapping(raw,path); _only_keys(item,{"id","check"},path)
+        if set(item)!={"id","check"}: _fail(path,"id and check are required")
+        _symbol(item["id"],path+".id")
+        if item["id"] in seen: _fail(path+".id",f"duplicate invariant ID {item['id']}")
+        seen.add(item["id"]); _validate_expression(item["check"],path+".check")
+        def refs(node):
+            if isinstance(node, Mapping): return set(node)&{"$local","$derived","$scope"} | set().union(*(refs(v) for v in node.values()))
+            if isinstance(node,list): return set().union(*(refs(v) for v in node))
+            return set()
+        forbidden=refs(item["check"])
+        if forbidden: _fail(path+".check",f"{sorted(forbidden)[0]} is not allowed in invariants")
+        result.append(MappingProxyType(dict(item)))
+    return tuple(result)
+
+def _id_list(value,path):
+    if not isinstance(value,list) or any(not isinstance(x,str) or not x for x in value): _fail(path,"expected list of non-empty IDs")
+    return tuple(value)
+
+def _expect(value,path):
+    body=_mapping(value,path); _only_keys(body,{"constraints","invariants"},path)
+    return MappingProxyType({"constraints":_id_list(body.get("constraints",[]),path+".constraints"),"invariants":_id_list(body.get("invariants",[]),path+".invariants")})
+
+def _parse_faults(value, steps):
+    if not isinstance(value,list): _fail("$.faults","expected ordered list")
+    executable={s.step_id:s for s in steps if s.control_kind is None}; result=[]; seen=set()
+    for index,raw in enumerate(value):
+        path=f"$.faults[{index}]"; item=_mapping(raw,path); _only_keys(item,{"id","enabled","at","selector","operator","expect","strict_unexpected"},path)
+        if not {"id","at","operator"}<=set(item): _fail(path,"id, at, and operator are required")
+        _symbol(item["id"],path+".id")
+        if item["id"] in seen: _fail(path+".id","duplicate fault ID")
+        seen.add(item["id"]); enabled=item.get("enabled",False); strict=item.get("strict_unexpected",True)
+        if type(enabled) is not bool or type(strict) is not bool: _fail(path,"enabled and strict_unexpected must be boolean")
+        at=item["at"]
+        if at not in {"before_validation","before_step"}: _fail(path+".at","unsupported fault hook")
+        op=_mapping(item["operator"],path+".operator")
+        if len(op)!=1: _fail(path+".operator","exactly one operator required")
+        name,body=next(iter(op.items())); allowed={"before_validation":{"override_resource"},"before_step":{"override_write","override_local","suppress_emissions"}}[at]
+        if name not in allowed: _fail(path+".operator","unsupported operator at hook")
+        parsed={"id":item["id"],"enabled":enabled,"at":at,"operator":MappingProxyType(dict(op)),"expect":_expect(item.get("expect",{}),path+".expect"),"strict_unexpected":strict}
+        if at=="before_step":
+            selector=_mapping(item.get("selector"),path+".selector"); _only_keys(selector,{"step","subflow_path","repetition_indexes"},path+".selector")
+            step=selector.get("step"); _symbol(step,path+".selector.step")
+            if step not in executable: _fail(path+".selector.step",f"unknown executable step {step}")
+            if "subflow_path" in selector and (not isinstance(selector["subflow_path"],list) or any(not isinstance(x,str) or not x for x in selector["subflow_path"])): _fail(path+".selector.subflow_path","expected control-node ID list")
+            if "repetition_indexes" in selector and (not isinstance(selector["repetition_indexes"],list) or any(type(x) is not int or x<0 for x in selector["repetition_indexes"])): _fail(path+".selector.repetition_indexes","expected nonnegative integer list")
+            body=_mapping(body,path+f".operator.{name}") if name!="suppress_emissions" else body
+            if name=="override_write":
+                _only_keys(body,{"path","value"},path); target=body.get("path")
+                if target not in executable[step].write: _fail(path,"override_write target is not declared by step")
+                _validate_expression(body["value"],path+".value",control=True)
+            elif name=="override_local":
+                _only_keys(body,{"name","value"},path); target=body.get("name")
+                if target not in executable[step].generate: _fail(path,"override_local target is not generated by step")
+                _validate_expression(body["value"],path+".value",control=True)
+            elif body is not True: _fail(path,"suppress_emissions requires true")
+            parsed["selector"]=MappingProxyType({k:tuple(v) if isinstance(v,list) else v for k,v in selector.items()})
+        else:
+            body=_mapping(body,path+".operator.override_resource"); _only_keys(body,{"path","value"},path)
+            _symbol(body.get("path"),path+".path"); _validate_expression(body["value"],path+".value",constraint=True)
+        result.append(MappingProxyType(parsed))
+    return tuple(result)
+
+def _parse_oracle(value):
+    if value is None: return None
+    body=_mapping(value,"$.oracle"); _only_keys(body,{"expected","strict_unexpected"},"$.oracle")
+    strict=body.get("strict_unexpected",True)
+    if type(strict) is not bool: _fail("$.oracle.strict_unexpected","expected boolean")
+    return MappingProxyType({"expected":_expect(body.get("expected",{}),"$.oracle.expected"),"strict_unexpected":strict})
+
 
 def _with(value: Any, path: str) -> Mapping[str, Any]:
     bindings = _mapping(value, path)
@@ -413,8 +486,12 @@ def parse_yaml(text: str) -> ScenarioDocument:
         body = definition.get("steps")
         if not isinstance(body, list) or not body: _fail(f"$.subflows.{name}.steps", "expected non-empty ordered list")
         subflows[name] = tuple(_parse_node(raw, f"$.subflows.{name}.steps[{index}]", seen) for index, raw in enumerate(body))
+    all_steps=tuple(steps)+tuple(step for flow in subflows.values() for step in flow)
+    invariants=_parse_invariants(root.get("invariants",[]))
+    faults=_parse_faults(root.get("faults",[]),all_steps)
+    oracle=_parse_oracle(root.get("oracle"))
     return ScenarioDocument(1, scenario_id, reference, MappingProxyType(dict(initial)), tuple(steps),
-                            MappingProxyType(resources), validators, constraints, MappingProxyType(subflows))
+                            MappingProxyType(resources), validators, constraints, MappingProxyType(subflows), invariants, faults, oracle)
 
 
 def parse_yaml_file(path: str | Path) -> ScenarioDocument:

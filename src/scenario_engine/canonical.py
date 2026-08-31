@@ -83,6 +83,12 @@ def canonical_scenario_payload(
             name: {"steps": [_step_payload(step) for step in document.subflows[name]]}
             for name in sorted(document.subflows)
         }
+    if document.invariants:
+        payload["invariants"] = _canonical_node(document.invariants)
+    if document.faults:
+        payload["faults"] = _canonical_node(document.faults)
+    if document.oracle is not None:
+        payload["oracle"] = _canonical_node(document.oracle)
     return normalize(payload)
 
 

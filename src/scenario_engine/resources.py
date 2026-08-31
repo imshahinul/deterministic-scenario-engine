@@ -79,6 +79,19 @@ class ResolvedResources:
         hashes.update({f"resource:{name}": fingerprint(self._values[name]) for name in self._values})
         return MappingProxyType({key: hashes[key] for key in sorted(hashes)})
 
+    def with_override(self, path: str, value: Any) -> "ResolvedResources":
+        parts = _path(path, "resource override")
+        values = self.snapshot()
+        current = values
+        for part in parts[:-1]:
+            if not isinstance(current, dict) or part not in current:
+                raise ResourceResolutionError(f"resource override {path}: missing path segment {part}")
+            current = current[part]
+        if not isinstance(current, dict) or parts[-1] not in current:
+            raise ResourceResolutionError(f"resource override {path}: missing path segment {parts[-1]}")
+        current[parts[-1]] = _copy(value)
+        return ResolvedResources(values, self._consumed)
+
 
 def _dependencies(node: Any, resource: str) -> set[str]:
     found: set[str] = set()

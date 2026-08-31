@@ -30,6 +30,7 @@ class ScenarioResult:
     runner: ScenarioRunner = field(compare=False, repr=False)
     manifest: ReproducibilityManifest
     resources: Any = field(default=None, compare=False, repr=False)
+    provenance: Any = field(default=None, compare=False, repr=False)
     _normalized_snapshot: Mapping[str, Any] = field(init=False, compare=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -49,6 +50,8 @@ class ScenarioResult:
             "state": self.runner.state.to_dict(),
             "terminal_transition": self.runner.next_step,
         })
+        if self.provenance is not None and self.provenance.records:
+            snapshot = normalize({**snapshot, "provenance": self.provenance.normalized()})
         object.__setattr__(self, "_normalized_snapshot", snapshot)
 
     @property

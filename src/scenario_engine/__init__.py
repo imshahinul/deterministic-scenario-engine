@@ -17,6 +17,9 @@ from .result import ScenarioResult
 from .rng import DeterministicRNG, IntegerRange
 from .runner import CandidateStep, ScenarioRunner, StepSpec
 from .state import ScenarioState
+from .invariants import InvariantDefinitionError, InvariantViolation
+from .oracle import OracleEvaluation, OracleMismatchError, OracleReport
+from .provenance import ProvenanceRecord, ScenarioProvenance
 from .values import MISSING, canonical_bytes, fingerprint, normalize
 
 __all__ = [
@@ -28,4 +31,6 @@ __all__ = [
     "ENGINE_VERSION", "canonical_bytes", "canonical_scenario_bytes",
     "canonical_scenario_hash", "canonical_scenario_payload", "fingerprint", "normalize",
     "MAX_REPEAT_COUNT",
+    "InvariantDefinitionError", "InvariantViolation", "OracleEvaluation", "OracleMismatchError",
+    "OracleReport", "ProvenanceRecord", "ScenarioProvenance",
 ]

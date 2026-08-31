@@ -196,8 +196,8 @@ def compile_constraint(node: Mapping[str, Any], resources) -> Expression:
     return _expression(node, resources)
 
 
-def compile_expression(node: Mapping[str, Any], resources) -> Expression:
-    return _expression(node, resources)
+def compile_expression(node: Mapping[str, Any], resources, scope=None) -> Expression:
+    return _expression(node, resources, scope)
 
 
 def compile_scoped_sequence(steps, resources, scope):

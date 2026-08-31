@@ -1,0 +1,31 @@
+dsl_version: 1
+scenario: phase05_oracle_fault
+clock: {start: "2026-01-01T00:00:00Z"}
+initial_state: {balance: 10}
+resources:
+  payment: {amount: {$literal: 5}}
+invariants:
+  - id: balance_nonnegative
+    check: {$gte: [{$state: balance}, {$literal: 0}]}
+faults:
+  - id: force_overdraft
+    enabled: true
+    at: before_step
+    selector: {step: debit}
+    operator:
+      override_write: {path: balance, value: {$literal: -1}}
+    expect: {constraints: [], invariants: [balance_nonnegative]}
+    strict_unexpected: true
+oracle:
+  expected: {constraints: [], invariants: []}
+  strict_unexpected: true
+subflows:
+  payment:
+    steps:
+      - id: debit
+        write: {balance: {$sub: [{$state: balance}, {$resource: payment.amount}]}}
+        transition: null
+steps:
+  - id: process_payment
+    call: {subflow: payment}
+    transition: null

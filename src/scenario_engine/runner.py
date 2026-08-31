@@ -60,7 +60,7 @@ class ScenarioRunner:
         self.next_step: str | None = None
         self._ids = DeterministicIDProvider(root_seed)
 
-    def run_step(self, spec: StepSpec) -> CandidateStep:
+    def run_step(self, spec: StepSpec, candidate_validator=None) -> CandidateStep:
         step_address = self.address.for_step(spec.step_id)
         context = GenerationContext(self.root_seed, step_address, self.clock, self._ids)
         pre_state = self.state.snapshot()
@@ -92,6 +92,8 @@ class ScenarioRunner:
             faults_applied=None,
         )
         candidate = CandidateStep(safe_post_state, artifacts, timestamp, transition, record)
+        if candidate_validator is not None:
+            candidate_validator(candidate, step_address)
 
         self.state.commit(post_state)
         self.history.append_committed(record)
