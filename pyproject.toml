@@ -4,5 +4,11 @@ version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = ["PyYAML==6.0.3"]
 
+[project.optional-dependencies]
+pytest = ["pytest>=9.1,<10"]
+
+[project.entry-points.pytest11]
+scenario_engine = "scenario_engine.pytest_plugin"
+
 [tool.unittest]
 start-directory = "tests"
