@@ -3,10 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+import re
 from types import MappingProxyType
 from typing import Any, Mapping
 
 import yaml
+from yaml.events import AliasEvent, ScalarEvent
+from yaml.resolver import Resolver
 
 from scenario_engine.values import MISSING, normalize
 
@@ -24,6 +27,68 @@ _EXPRESSION_OPERATORS = {
     "$lt", "$lte", "$gt", "$gte", "$and", "$or", "$not", "$len", "$scope",
 }
 _GENERATOR_OPERATORS = {"$int", "$id", "$literal", "$plugin"}
+
+
+class _DSLLoader(yaml.SafeLoader):
+    """Safe loader with the deliberately narrow DSL 1.0 scalar contract."""
+
+
+# PyYAML's YAML 1.1 resolver treats yes/no/on/off as booleans and timestamps as
+# datetime objects.  DSL 1.0 only has true/false booleans, decimal integers,
+# explicit semantic datetimes, and the standard null spellings.
+_DSLLoader.yaml_implicit_resolvers = {
+    key: list(resolvers) for key, resolvers in Resolver.yaml_implicit_resolvers.items()
+}
+for first, resolvers in tuple(_DSLLoader.yaml_implicit_resolvers.items()):
+    _DSLLoader.yaml_implicit_resolvers[first] = [
+        (tag, regexp) for tag, regexp in resolvers
+        if tag not in {"tag:yaml.org,2002:bool", "tag:yaml.org,2002:int", "tag:yaml.org,2002:timestamp"}
+    ]
+_DSLLoader.add_implicit_resolver(
+    "tag:yaml.org,2002:bool", re.compile(r"^(?:true|false)$"), list("tf")
+)
+_DSLLoader.add_implicit_resolver(
+    "tag:yaml.org,2002:int", re.compile(r"^(?:0|-?[1-9][0-9]*)$"), list("-0123456789")
+)
+
+
+def _reject_ambiguous_yaml_constructs(text: str) -> None:
+    """Reject graph features and merge keys before semantic construction."""
+    try:
+        for event in yaml.parse(text, Loader=_DSLLoader):
+            if isinstance(event, AliasEvent):
+                raise DSLParseError("YAML aliases are not supported by DSL 1.0")
+            if isinstance(event, ScalarEvent) and event.value == "<<" and event.implicit[0]:
+                raise DSLParseError("YAML merge keys are not supported by DSL 1.0")
+    except DSLParseError:
+        raise
+    except yaml.YAMLError as error:
+        mark = getattr(error, "problem_mark", None)
+        location = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+        raise DSLParseError(f"YAML safe-load failed{location}") from None
+
+
+def _construct_strict_mapping(loader: _DSLLoader, node: yaml.MappingNode, deep: bool = False) -> dict[Any, Any]:
+    loader.flatten_mapping(node)
+    result: dict[Any, Any] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        try:
+            duplicate = key in result
+        except TypeError:
+            duplicate = False
+        if duplicate:
+            raise DSLParseError(f"duplicate YAML mapping key {key!r}")
+        try:
+            result[key] = loader.construct_object(value_node, deep=deep)
+        except TypeError:
+            raise DSLParseError("unhashable YAML mapping key") from None
+    return result
+
+
+_DSLLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_strict_mapping
+)
 
 
 def _fail(path: str, message: str) -> None:
@@ -446,8 +511,11 @@ def _parse_node(raw: Any, path: str, seen: set[str]) -> StepDocument:
 
 
 def parse_yaml(text: str) -> ScenarioDocument:
+    _reject_ambiguous_yaml_constructs(text)
     try:
-        loaded = yaml.safe_load(text)
+        loaded = yaml.load(text, Loader=_DSLLoader)
+    except DSLParseError:
+        raise
     except yaml.YAMLError as error:
         mark = getattr(error, "problem_mark", None)
         location = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""

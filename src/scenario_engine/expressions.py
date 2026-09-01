@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Context, Decimal, DecimalException, ROUND_HALF_EVEN, localcontext
 from typing import Any, Mapping
 
 from .errors import ScenarioEngineError
@@ -18,6 +18,38 @@ def _mutable(value: Any) -> Any:
 
 class ExpressionEvaluationError(ScenarioEngineError, ValueError):
     pass
+
+
+# DSL 1.0 decimal arithmetic is independent of decimal.getcontext().  Precision
+# 28 and ROUND_HALF_EVEN preserve the engine's prior default-context behavior.
+_ARITHMETIC_CONTEXT = Context(prec=28, rounding=ROUND_HALF_EVEN)
+
+
+def _operand_error(operator: str, left: Any, right: Any) -> ExpressionEvaluationError:
+    return ExpressionEvaluationError(
+        f"incompatible operands for {operator}: {type(left).__name__}, {type(right).__name__}"
+    )
+
+
+def _numeric_pair(operator: str, left: Any, right: Any) -> tuple[int | Decimal, int | Decimal]:
+    if not _numeric(left) or not _numeric(right):
+        raise _operand_error(operator, left, right)
+    return left, right
+
+
+def _decimal_binary(operator: str, left: int | Decimal, right: int | Decimal) -> Decimal:
+    try:
+        with localcontext(_ARITHMETIC_CONTEXT):
+            left_decimal, right_decimal = Decimal(left), Decimal(right)
+            if operator == "$add":
+                return left_decimal + right_decimal
+            if operator == "$sub":
+                return left_decimal - right_decimal
+            if operator == "$mul":
+                return left_decimal * right_decimal
+            return left_decimal / right_decimal
+    except DecimalException as error:
+        raise ExpressionEvaluationError(f"{operator} decimal arithmetic failed") from error
 
 
 class ScopeResolutionError(ExpressionEvaluationError):
@@ -114,23 +146,19 @@ class Binary(Expression):
 class Add(Binary):
     def evaluate(self, env: EvaluationEnvironment) -> Any:
         left, right = self.left.evaluate(env), self.right.evaluate(env)
-        try:
-            return left + right
-        except TypeError as error:
-            raise ExpressionEvaluationError(
-                f"incompatible operands for $add: {type(left).__name__}, {type(right).__name__}"
-            ) from error
+        _numeric_pair("$add", left, right)
+        if isinstance(left, Decimal) or isinstance(right, Decimal):
+            return _decimal_binary("$add", left, right)
+        return left + right
 
 
 class Multiply(Binary):
     def evaluate(self, env: EvaluationEnvironment) -> Any:
         left, right = self.left.evaluate(env), self.right.evaluate(env)
-        try:
-            return left * right
-        except TypeError as error:
-            raise ExpressionEvaluationError(
-                f"incompatible operands for $mul: {type(left).__name__}, {type(right).__name__}"
-            ) from error
+        _numeric_pair("$mul", left, right)
+        if isinstance(left, Decimal) or isinstance(right, Decimal):
+            return _decimal_binary("$mul", left, right)
+        return left * right
 
 
 def _numeric(value: Any) -> bool:
@@ -140,21 +168,19 @@ def _numeric(value: Any) -> bool:
 class Subtract(Binary):
     def evaluate(self, env: EvaluationEnvironment) -> Any:
         left, right = self.left.evaluate(env), self.right.evaluate(env)
-        if not _numeric(left) or not _numeric(right):
-            raise ExpressionEvaluationError("$sub operands must be integer or decimal")
+        _numeric_pair("$sub", left, right)
         if isinstance(left, Decimal) or isinstance(right, Decimal):
-            return Decimal(left) - Decimal(right)
+            return _decimal_binary("$sub", left, right)
         return left - right
 
 
 class Divide(Binary):
     def evaluate(self, env: EvaluationEnvironment) -> Decimal:
         left, right = self.left.evaluate(env), self.right.evaluate(env)
-        if not _numeric(left) or not _numeric(right):
-            raise ExpressionEvaluationError("$div operands must be integer or decimal")
+        _numeric_pair("$div", left, right)
         if right == 0:
             raise ExpressionEvaluationError("$div division by zero")
-        return Decimal(left) / Decimal(right)
+        return _decimal_binary("$div", left, right)
 
 
 class Equal(Binary):
@@ -265,7 +291,15 @@ class SumField(Expression):
     field: str
     def evaluate(self, env: EvaluationEnvironment) -> Any:
         values = self.sequence.evaluate(env)
-        return sum((item[self.field] for item in values), Decimal("0"))
+        result: int | Decimal = 0
+        for item in values:
+            value = item[self.field]
+            _numeric_pair("$sum_field", result, value)
+            if isinstance(result, Decimal) or isinstance(value, Decimal):
+                result = _decimal_binary("$add", result, value)
+            else:
+                result += value
+        return result
     def dependencies(self) -> frozenset[str]:
         return self.sequence.dependencies()
 
