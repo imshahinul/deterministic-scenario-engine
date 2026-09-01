@@ -145,7 +145,7 @@ class Phase04ControlFlowTests(unittest.TestCase):
 
     def test_subflow_failure_preserves_failing_step_atomicity(self):
         bad = REPEAT.replace("value: {$scope: i}", "value: {$state: missing}")
-        with self.assertRaises(KeyError): run(bad)
+        with self.assertRaises(ScopeResolutionError): run(bad)
 
     def test_control_flow_canonical_hash_ignores_subflow_mapping_order(self):
         text = self._branch(True)

@@ -4,7 +4,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
+from scenario_engine.errors import PytestIntegrationError
+
+try:
+    import pytest
+except ModuleNotFoundError as error:
+    if error.name != "pytest":
+        raise
+    raise PytestIntegrationError(
+        "pytest integration requires the optional 'pytest' extra"
+    ) from None
 
 from scenario_engine.dsl import compile_document, evaluate_scenario, parse_yaml, replay_scenario, run_scenario
 from scenario_engine.manifest import ReproducibilityManifest

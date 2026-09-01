@@ -7,12 +7,13 @@ from copy import deepcopy
 from types import MappingProxyType
 from typing import Any, Mapping
 
+from .errors import ScenarioEngineError
 from .expressions import EvaluationEnvironment
 
 MAX_REPEAT_COUNT = 100
 
 
-class ControlFlowError(ValueError):
+class ControlFlowError(ScenarioEngineError, ValueError):
     pass
 
 

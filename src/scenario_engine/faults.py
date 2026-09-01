@@ -2,8 +2,9 @@
 from dataclasses import replace
 from types import MappingProxyType
 from .dsl.compiler import LiteralGenerator, compile_expression
+from .errors import ScenarioEngineError
 
-class FaultError(ValueError): pass
+class FaultError(ScenarioEngineError, ValueError): pass
 class FaultDefinitionError(FaultError): pass
 class FaultApplicationError(FaultError): pass
 

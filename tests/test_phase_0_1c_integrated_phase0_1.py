@@ -16,6 +16,7 @@ from scenario_engine.dsl import (
     parse_yaml,
     run_scenario,
 )
+from scenario_engine.expressions import ScopeResolutionError
 from scenario_engine.runner import ScenarioRunner
 from scenario_engine.state import ScenarioState
 from scenario_engine.values import MISSING, normalize
@@ -149,7 +150,7 @@ class IntegratedPhase01Tests(unittest.TestCase):
         runner = fresh_runner(scenario)
         runner.run_step(scenario.steps[0].spec)
         before = observable(runner)
-        with self.assertRaises(KeyError):
+        with self.assertRaises(ScopeResolutionError):
             runner.run_step(scenario.steps[1].spec)
         self.assertEqual(before, observable(runner))
 
@@ -159,7 +160,7 @@ class IntegratedPhase01Tests(unittest.TestCase):
         runner = fresh_runner(scenario)
         runner.run_step(scenario.steps[0].spec)
         before = observable(runner)
-        with self.assertRaises(KeyError):
+        with self.assertRaises(ScopeResolutionError):
             runner.run_step(scenario.steps[1].spec)
         self.assertEqual(before, observable(runner))
 

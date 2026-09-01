@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Mapping
 
+from .errors import ScenarioEngineError
 from .values import canonical_bytes
 
 
@@ -15,7 +16,7 @@ def _mutable(value: Any) -> Any:
     return value
 
 
-class ExpressionEvaluationError(ValueError):
+class ExpressionEvaluationError(ScenarioEngineError, ValueError):
     pass
 
 
@@ -61,7 +62,12 @@ class Literal(Expression):
 class StateRef(Expression):
     name: str
     def evaluate(self, env: EvaluationEnvironment) -> Any:
-        return env.pre_state[self.name]
+        try:
+            return env.pre_state[self.name]
+        except KeyError:
+            raise ScopeResolutionError(
+                f"unknown semantic reference: namespace=state name={self.name}"
+            ) from None
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,14 +81,24 @@ class ScopeRef(Expression):
 class LocalRef(Expression):
     name: str
     def evaluate(self, env: EvaluationEnvironment) -> Any:
-        return env.locals[self.name]
+        try:
+            return env.locals[self.name]
+        except KeyError:
+            raise ScopeResolutionError(
+                f"unknown semantic reference: namespace=local name={self.name}"
+            ) from None
 
 
 @dataclass(frozen=True, slots=True)
 class DerivedRef(Expression):
     name: str
     def evaluate(self, env: EvaluationEnvironment) -> Any:
-        return env.derived[self.name]
+        try:
+            return env.derived[self.name]
+        except KeyError:
+            raise ScopeResolutionError(
+                f"unknown semantic reference: namespace=derived name={self.name}"
+            ) from None
     def dependencies(self) -> frozenset[str]:
         return frozenset((self.name,))
 
@@ -97,12 +113,24 @@ class Binary(Expression):
 
 class Add(Binary):
     def evaluate(self, env: EvaluationEnvironment) -> Any:
-        return self.left.evaluate(env) + self.right.evaluate(env)
+        left, right = self.left.evaluate(env), self.right.evaluate(env)
+        try:
+            return left + right
+        except TypeError as error:
+            raise ExpressionEvaluationError(
+                f"incompatible operands for $add: {type(left).__name__}, {type(right).__name__}"
+            ) from error
 
 
 class Multiply(Binary):
     def evaluate(self, env: EvaluationEnvironment) -> Any:
-        return self.left.evaluate(env) * self.right.evaluate(env)
+        left, right = self.left.evaluate(env), self.right.evaluate(env)
+        try:
+            return left * right
+        except TypeError as error:
+            raise ExpressionEvaluationError(
+                f"incompatible operands for $mul: {type(left).__name__}, {type(right).__name__}"
+            ) from error
 
 
 def _numeric(value: Any) -> bool:
@@ -242,7 +270,7 @@ class SumField(Expression):
         return self.sequence.dependencies()
 
 
-class DerivationCycleError(ValueError):
+class DerivationCycleError(ExpressionEvaluationError):
     pass
 
 
@@ -251,7 +279,9 @@ def resolve_derivations(expressions: Mapping[str, Expression], env: EvaluationEn
     dependencies = {name: set(expr.dependencies()) for name, expr in expressions.items()}
     unknown = sorted({dep for deps in dependencies.values() for dep in deps if dep not in names})
     if unknown:
-        raise KeyError(f"unknown derived references: {', '.join(unknown)}")
+        raise ScopeResolutionError(
+            "unknown semantic references: namespace=derived names=" + ",".join(unknown)
+        )
     remaining = set(names)
     order: list[str] = []
     while remaining:

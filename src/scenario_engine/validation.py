@@ -6,17 +6,18 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Mapping
 
+from .errors import ScenarioEngineError
 from .expressions import EvaluationEnvironment, Expression
 from .ids import LogicalID
 from .resources import ResolvedResources, ResourceResolutionError
 from .values import MISSING, canonical_bytes
 
 
-class ResourceValidationError(ValueError):
+class ResourceValidationError(ScenarioEngineError, ValueError):
     pass
 
 
-class ConstraintError(ValueError):
+class ConstraintError(ScenarioEngineError, ValueError):
     pass
 
 

@@ -6,10 +6,11 @@ from collections.abc import Mapping
 from types import MappingProxyType
 from typing import Any
 
+from .errors import ScenarioEngineError
 from .values import canonical_bytes, fingerprint, normalize
 
 
-class ResourceError(ValueError):
+class ResourceError(ScenarioEngineError, ValueError):
     pass
 
 

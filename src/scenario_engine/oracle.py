@@ -1,8 +1,9 @@
 """Deterministic expected-violation oracle results."""
 from dataclasses import dataclass
 from typing import Any
+from .errors import ScenarioEngineError
 
-class OracleError(ValueError): pass
+class OracleError(ScenarioEngineError, ValueError): pass
 class OracleMismatchError(OracleError):
     def __init__(self, evaluation):
         self.evaluation = evaluation

@@ -1,44 +1,41 @@
-"""Executable semantic kernel for the Phase 0.1A spike."""
+"""Deliberately small supported Python API for Deterministic Scenario Engine."""
 
 from .address import ExecutionAddress
-from .control_flow import MAX_REPEAT_COUNT
-from .artifacts import GeneratedArtifact
-from .clock import LogicalClock
 from .canonical import (
     canonical_scenario_bytes, canonical_scenario_hash, canonical_scenario_payload,
 )
-from .context import GenerationContext
-from .history import HistoryRecord, ScenarioHistory
-from .ids import DeterministicIDProvider, LogicalID
+from .control_flow import ControlFlowError
+from .dsl import (
+    DSLCompilationError, DSLError, DSLParseError, DSLSchemaError,
+    compile_document, evaluate_scenario, parse_yaml, parse_yaml_file,
+    replay_scenario, run_scenario,
+)
+from .errors import ScenarioEngineError
+from .expressions import ExpressionEvaluationError
+from .faults import FaultError
+from .ids import LogicalID
+from .invariants import InvariantError
 from .manifest import (
     ENGINE_VERSION, ReplayCompatibilityError, ReproducibilityManifest,
 )
-from .result import ScenarioResult
-from .rng import DeterministicRNG, IntegerRange
-from .runner import CandidateStep, ScenarioRunner, StepSpec
-from .state import ScenarioState
-from .invariants import InvariantDefinitionError, InvariantViolation
-from .oracle import OracleEvaluation, OracleMismatchError, OracleReport
-from .provenance import ProvenanceRecord, ScenarioProvenance
+from .oracle import OracleError
 from .plugins import (
-    GeneratorPlugin, PluginCompatibilityError, PluginDefinitionError,
-    PluginExecutionError, PluginGenerationContext, PluginNotFoundError,
-    PluginRegistry, PluginResultError, PluginVersionMismatchError,
+    GeneratorPlugin, PluginError, PluginGenerationContext, PluginRegistry,
 )
-from .values import MISSING, canonical_bytes, fingerprint, normalize
+from .resources import ResourceError
+from .result import ScenarioResult
+from .validation import ConstraintError, ResourceValidationError
+from .values import MISSING
 
 __all__ = [
-    "CandidateStep", "DeterministicIDProvider", "DeterministicRNG",
-    "ExecutionAddress", "GeneratedArtifact", "GenerationContext",
-    "HistoryRecord", "IntegerRange", "LogicalClock", "LogicalID", "MISSING",
-    "ReplayCompatibilityError", "ReproducibilityManifest", "ScenarioHistory",
-    "ScenarioResult", "ScenarioRunner", "ScenarioState", "StepSpec",
-    "ENGINE_VERSION", "canonical_bytes", "canonical_scenario_bytes",
-    "canonical_scenario_hash", "canonical_scenario_payload", "fingerprint", "normalize",
-    "MAX_REPEAT_COUNT",
-    "InvariantDefinitionError", "InvariantViolation", "OracleEvaluation", "OracleMismatchError",
-    "OracleReport", "ProvenanceRecord", "ScenarioProvenance",
-    "GeneratorPlugin", "PluginCompatibilityError", "PluginDefinitionError",
-    "PluginExecutionError", "PluginGenerationContext", "PluginNotFoundError",
-    "PluginRegistry", "PluginResultError", "PluginVersionMismatchError",
+    "ENGINE_VERSION", "MISSING", "LogicalID", "ExecutionAddress",
+    "ScenarioResult", "ReproducibilityManifest", "parse_yaml",
+    "parse_yaml_file", "compile_document", "run_scenario", "replay_scenario",
+    "evaluate_scenario", "canonical_scenario_payload", "canonical_scenario_bytes",
+    "canonical_scenario_hash", "GeneratorPlugin", "PluginRegistry",
+    "PluginGenerationContext", "ScenarioEngineError", "DSLError",
+    "DSLParseError", "DSLSchemaError", "DSLCompilationError",
+    "ExpressionEvaluationError", "ResourceError", "ResourceValidationError",
+    "ConstraintError", "ControlFlowError", "InvariantError", "FaultError",
+    "OracleError", "ReplayCompatibilityError", "PluginError",
 ]

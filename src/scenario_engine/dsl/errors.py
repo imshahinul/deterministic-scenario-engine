@@ -1,7 +1,9 @@
 """Deterministic public errors for the Phase 0.1B declarative layer."""
 
+from scenario_engine.errors import ScenarioEngineError
 
-class DSLError(ValueError):
+
+class DSLError(ScenarioEngineError, ValueError):
     """Base class for declarative scenario errors."""
 
 

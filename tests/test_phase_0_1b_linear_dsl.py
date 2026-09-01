@@ -10,6 +10,7 @@ from scenario_engine.dsl import (
     UnsupportedDSLVersionError, compile_document, decode_semantic_value,
     parse_yaml, parse_yaml_file, run_scenario,
 )
+from scenario_engine.expressions import ScopeResolutionError
 from scenario_engine.runner import ScenarioRunner
 from scenario_engine.address import ExecutionAddress
 from scenario_engine.state import ScenarioState
@@ -127,7 +128,7 @@ class LinearDSLTests(unittest.TestCase):
         before = normalize({"state": runner.state.to_dict(), "clock": runner.clock.current,
                             "history": len(runner.history.records), "artifacts": len(runner.artifacts),
                             "next": runner.next_step})
-        with self.assertRaises(KeyError):
+        with self.assertRaises(ScopeResolutionError):
             runner.run_step(scenario.steps[1].spec)
         after = normalize({"state": runner.state.to_dict(), "clock": runner.clock.current,
                            "history": len(runner.history.records), "artifacts": len(runner.artifacts),

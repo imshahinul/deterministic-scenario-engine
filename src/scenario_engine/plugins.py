@@ -17,6 +17,7 @@ from typing import Any, Callable, Iterable, Mapping
 from .address import ExecutionAddress
 from .clock import LogicalClock
 from .context import GenerationContext
+from .errors import ScenarioEngineError
 from .ids import DeterministicIDProvider
 from .rng import DeterministicRNG
 from .values import MISSING, normalize
@@ -25,7 +26,7 @@ from .values import MISSING, normalize
 _PLUGIN_NAME = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
 
 
-class PluginError(ValueError):
+class PluginError(ScenarioEngineError, ValueError):
     """Base class for stable plugin-boundary diagnostics."""
 
 
@@ -45,11 +46,11 @@ class PluginCompatibilityError(PluginError):
     """A plugin scenario cannot execute or replay with a supplied registry."""
 
 
-class PluginExecutionError(RuntimeError):
+class PluginExecutionError(PluginError, RuntimeError):
     """A plugin callable raised an unexpected exception."""
 
 
-class PluginResultError(TypeError):
+class PluginResultError(PluginError, TypeError):
     """A plugin returned a value outside the engine semantic model."""
 
 
@@ -158,7 +159,7 @@ def invoke_plugin(
     try:
         result = plugin.generate(plugin_context, isolated)
     except Exception as error:
-        if isinstance(error, (PluginError, PluginResultError)):
+        if isinstance(error, PluginError):
             raise
         raise PluginExecutionError(
             f"plugin {plugin.name}@{plugin.version} failed at "

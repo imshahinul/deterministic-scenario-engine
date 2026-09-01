@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from types import MappingProxyType
 from typing import Any, Mapping
 
+from .errors import ScenarioEngineError
 from .ids import ID_VERSION
 from .rng import RNG_VERSION
 from .values import normalize
@@ -16,7 +17,7 @@ ENGINE_VERSION = "0.2.0.dev0"
 GENERATOR_VERSIONS = MappingProxyType({"int": RNG_VERSION, "logical_id": ID_VERSION})
 
 
-class ReplayCompatibilityError(ValueError):
+class ReplayCompatibilityError(ScenarioEngineError, ValueError):
     """A manifest cannot be replayed by this exact engine contract."""
 
 

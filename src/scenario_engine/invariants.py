@@ -1,8 +1,9 @@
 """Candidate-post-state invariant definitions and evaluation."""
 from types import MappingProxyType
+from .errors import ScenarioEngineError
 from .expressions import EvaluationEnvironment
 
-class InvariantError(ValueError): pass
+class InvariantError(ScenarioEngineError, ValueError): pass
 class InvariantDefinitionError(InvariantError): pass
 class InvariantViolation(InvariantError):
     def __init__(self, invariant_id, step_id, execution_address, reason=None):

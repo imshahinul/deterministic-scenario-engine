@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Mapping
 
+from scenario_engine.errors import ScenarioEngineError
+
 try:
     from hypothesis import strategies as st
     from hypothesis.strategies import SearchStrategy
@@ -23,7 +25,7 @@ from scenario_engine.plugins import PluginRegistry
 from scenario_engine.result import ScenarioResult
 
 
-class HypothesisIntegrationError(ValueError):
+class HypothesisIntegrationError(ScenarioEngineError, ValueError):
     """The explicit property-testing adapter contract is invalid."""
 
 

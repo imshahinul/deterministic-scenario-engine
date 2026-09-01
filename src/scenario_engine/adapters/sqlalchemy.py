@@ -9,6 +9,8 @@ from decimal import Decimal
 from types import MappingProxyType
 from typing import Any, Mapping
 
+from scenario_engine.errors import ScenarioEngineError
+
 try:
     from sqlalchemy import Table
     from sqlalchemy.engine import Engine
@@ -23,7 +25,7 @@ from scenario_engine.result import ScenarioResult
 from scenario_engine.values import MISSING, fingerprint
 
 
-class SqlAlchemyMaterializerError(ValueError):
+class SqlAlchemyMaterializerError(ScenarioEngineError, ValueError):
     """Base class for deterministic adapter errors."""
 
 

@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Mapping
 
+from scenario_engine.errors import ScenarioEngineError
+
 try:
     import schemathesis  # noqa: F401 - verifies the explicit optional dependency
     from hypothesis import strategies as st
@@ -21,7 +23,7 @@ from scenario_engine.integrations.hypothesis import ScenarioHypothesisCase
 from scenario_engine.result import ScenarioResult
 
 
-class SchemathesisIntegrationError(ValueError):
+class SchemathesisIntegrationError(ScenarioEngineError, ValueError):
     """Base error for explicit Schemathesis composition failures."""
 
 
