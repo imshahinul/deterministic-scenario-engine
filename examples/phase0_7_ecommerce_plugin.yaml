@@ -1,0 +1,81 @@
+dsl_version: 1
+scenario: ecommerce_plugin_history
+clock: {start: "2026-07-01T09:00:00Z"}
+resources:
+  email_domain: {$input: email_domain}
+  item_prefix: {$literal: TST}
+initial_state:
+  status: new
+  customer_email: null
+  sku: null
+  order_number: null
+  tracking_number: null
+  paid: false
+steps:
+  - id: create_customer
+    generate:
+      customer_email:
+        $plugin:
+          name: ecommerce.customer_email
+          version: "1"
+          args:
+            domain: {$resource: email_domain}
+            prefix: {$literal: shopper}
+    write:
+      customer_email: {$local: customer_email}
+      status: {$literal: customer_created}
+    emit:
+      - type: customer_created
+        fields: {customer_email: {$state: customer_email}}
+    advance: {seconds: 1}
+    transition: create_order
+  - id: create_order
+    generate:
+      order_number:
+        $plugin:
+          name: ecommerce.order_number
+          version: "1"
+          args: {prefix: {$literal: ORD}}
+      sku:
+        $plugin:
+          name: ecommerce.sku
+          version: "1"
+          args: {prefix: {$resource: item_prefix}}
+    write:
+      order_number: {$local: order_number}
+      sku: {$local: sku}
+      status: {$literal: order_created}
+    emit:
+      - type: order_created
+        fields:
+          customer_email: {$state: customer_email}
+          order_number: {$state: order_number}
+          sku: {$state: sku}
+    advance: {seconds: 2}
+    transition: checkout
+  - id: checkout
+    write:
+      paid: {$literal: true}
+      status: {$literal: payment_captured}
+    emit:
+      - type: payment_captured
+        fields: {order_number: {$state: order_number}}
+    advance: {seconds: 3}
+    transition: ship
+  - id: ship
+    generate:
+      tracking_number:
+        $plugin:
+          name: ecommerce.tracking_number
+          version: "1"
+          args: {prefix: {$literal: SYN}}
+    write:
+      tracking_number: {$local: tracking_number}
+      status: {$literal: shipped}
+    emit:
+      - type: shipment_created
+        fields:
+          order_number: {$state: order_number}
+          tracking_number: {$state: tracking_number}
+    advance: {seconds: 4}
+    transition: null

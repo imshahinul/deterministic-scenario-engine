@@ -23,7 +23,7 @@ _EXPRESSION_OPERATORS = {
     "$object", "$sum_field", "$resource", "$sub", "$div", "$eq", "$ne",
     "$lt", "$lte", "$gt", "$gte", "$and", "$or", "$not", "$len", "$scope",
 }
-_GENERATOR_OPERATORS = {"$int", "$id", "$literal"}
+_GENERATOR_OPERATORS = {"$int", "$id", "$literal", "$plugin"}
 
 
 def _fail(path: str, message: str) -> None:
@@ -177,6 +177,18 @@ def _validate_generator(node: Any, path: str) -> None:
             _fail(path + ".$int", "lower bound must not exceed upper bound")
     elif operator == "$id":
         _symbol(payload, path + ".$id")
+    elif operator == "$plugin":
+        body = _mapping(payload, path + ".$plugin")
+        _only_keys(body, {"name", "version", "args"}, path + ".$plugin")
+        if not {"name", "version"} <= set(body):
+            _fail(path + ".$plugin", "name and version are required")
+        _symbol(body["name"], path + ".$plugin.name")
+        if not isinstance(body["version"], str) or not body["version"].strip():
+            _fail(path + ".$plugin.version", "expected non-empty string")
+        arguments = _mapping(body.get("args", {}), path + ".$plugin.args")
+        for name, expression in arguments.items():
+            _symbol(name, path + ".$plugin.args key")
+            _validate_expression(expression, f"{path}.$plugin.args.{name}", control=True)
     else:
         decode_semantic_value(payload, path + ".$literal")
 

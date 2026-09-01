@@ -20,6 +20,11 @@ from .state import ScenarioState
 from .invariants import InvariantDefinitionError, InvariantViolation
 from .oracle import OracleEvaluation, OracleMismatchError, OracleReport
 from .provenance import ProvenanceRecord, ScenarioProvenance
+from .plugins import (
+    GeneratorPlugin, PluginCompatibilityError, PluginDefinitionError,
+    PluginExecutionError, PluginGenerationContext, PluginNotFoundError,
+    PluginRegistry, PluginResultError, PluginVersionMismatchError,
+)
 from .values import MISSING, canonical_bytes, fingerprint, normalize
 
 __all__ = [
@@ -33,4 +38,7 @@ __all__ = [
     "MAX_REPEAT_COUNT",
     "InvariantDefinitionError", "InvariantViolation", "OracleEvaluation", "OracleMismatchError",
     "OracleReport", "ProvenanceRecord", "ScenarioProvenance",
+    "GeneratorPlugin", "PluginCompatibilityError", "PluginDefinitionError",
+    "PluginExecutionError", "PluginGenerationContext", "PluginNotFoundError",
+    "PluginRegistry", "PluginResultError", "PluginVersionMismatchError",
 ]

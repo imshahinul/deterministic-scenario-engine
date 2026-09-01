@@ -15,6 +15,7 @@ from scenario_engine.validation import ConstraintDefinitionError, ConstraintViol
 from scenario_engine.control_flow import (BranchConditionError, ControlFlowError,
     RepeatCountError, RepeatLimitError, SubflowCycleError, UnknownSubflowError)
 from scenario_engine.expressions import ScopeResolutionError
+from scenario_engine.plugins import PluginCompatibilityError
 
 __all__ = [
     "CompiledScenario", "DSLCompilationError", "DSLError", "DSLParseError",
@@ -26,4 +27,5 @@ __all__ = [
     "BranchConditionError", "ControlFlowError", "RepeatCountError", "RepeatLimitError",
     "ScopeResolutionError", "SubflowCycleError", "UnknownSubflowError",
     "InvariantDefinitionError", "InvariantViolation", "OracleEvaluation", "OracleMismatchError", "OracleReport",
+    "PluginCompatibilityError",
 ]

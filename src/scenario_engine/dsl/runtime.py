@@ -17,16 +17,62 @@ from scenario_engine.faults import apply_step_faults
 from scenario_engine.oracle import OracleEvaluation, OracleMismatchError, OracleReport
 from scenario_engine.validation import ConstraintDefinitionError, ConstraintViolation, ResourceValidationError, validate_resources
 from scenario_engine.expressions import EvaluationEnvironment
+from scenario_engine.plugins import (
+    EMPTY_PLUGIN_REGISTRY, PluginCompatibilityError, PluginNotFoundError,
+    PluginRegistry, PluginVersionMismatchError,
+)
 
 from .compiler import compile_constraint, compile_document, compile_expression, compile_scoped_sequence
 from .models import CompiledScenario
 from .parser import parse_yaml
 
 
+def _plugin_requirements(document):
+    requirements = {}
+    sequences = (document.steps, *document.subflows.values())
+    for sequence in sequences:
+        for step in sequence:
+            for declaration in step.generate.values():
+                if "$plugin" not in declaration:
+                    continue
+                body = declaration["$plugin"]
+                prior = requirements.get(body["name"])
+                if prior is not None and prior != body["version"]:
+                    raise PluginCompatibilityError(
+                        f"scenario declares conflicting versions for plugin {body['name']}"
+                    )
+                requirements[body["name"]] = body["version"]
+    return MappingProxyType({name: requirements[name] for name in sorted(requirements)})
+
+
+def _registry(plugins):
+    if plugins is None:
+        return EMPTY_PLUGIN_REGISTRY
+    if not isinstance(plugins, PluginRegistry):
+        raise TypeError("plugins must be a PluginRegistry or None")
+    return plugins
+
+
+def _prevalidate_plugins(document, plugins):
+    requirements = _plugin_requirements(document)
+    for name, version in requirements.items():
+        try:
+            plugins.require(name, version)
+        except (PluginNotFoundError, PluginVersionMismatchError) as error:
+            raise PluginCompatibilityError(str(error)) from error
+    return requirements
+
+
+def _generator_versions(document):
+    return MappingProxyType({**dict(GENERATOR_VERSIONS), **{
+        f"plugin:{name}": version for name, version in _plugin_requirements(document).items()
+    }})
+
+
 def _manifest(scenario, root_seed, run_index, locale, base_resources):
     return ReproducibilityManifest(root_seed=root_seed, scenario_canonical_hash=canonical_scenario_hash(scenario),
         engine_version=ENGINE_VERSION, dsl_version=scenario.document.dsl_version,
-        generator_versions=GENERATOR_VERSIONS, rng_algorithm_version=RNG_VERSION,
+        generator_versions=_generator_versions(scenario.document), rng_algorithm_version=RNG_VERSION,
         id_algorithm_version=ID_VERSION, locale=locale,
         reference_clock_start=scenario.reference_clock_start, run_index=run_index,
         input_resource_hashes=base_resources.hashes())
@@ -55,12 +101,12 @@ def _prepare(scenario, inputs, provenance):
             error=ConstraintViolation(f"constraint {item['id']} violated" + (f": {item['message']}" if item.get("message") else ""))
             error.constraint_id=item["id"]; error.applied_faults=tuple(applied); error.provenance=ScenarioProvenance(tuple(provenance)); error.base_resources=base; error.resources=resources
             raise error
-    return compile_document(scenario.document,resources),base,resources,applied
+    return scenario,base,resources,applied
 
 
-def _execute(scenario, root_seed, run_index, locale, inputs):
+def _execute(scenario, root_seed, run_index, locale, inputs, plugins=None):
     if isinstance(run_index,bool) or not isinstance(run_index,int) or run_index<0: raise ValueError("run_index must be a nonnegative integer")
-    records=[]
+    records=[]; plugins=_registry(plugins); _prevalidate_plugins(scenario.document,plugins)
     try:
         scenario,base,resources,applied=_prepare(scenario,inputs,records)
     except ConstraintViolation as error:
@@ -68,8 +114,9 @@ def _execute(scenario, root_seed, run_index, locale, inputs):
         base=error.base_resources
         error.manifest=_manifest(unresolved,root_seed,run_index,locale,base)
         raise
-    manifest=_manifest(scenario,root_seed,run_index,locale,base)
     runner=ScenarioRunner(root_seed,ExecutionAddress(scenario.scenario_id,run_index),ScenarioState(scenario.initial_state),LogicalClock(scenario.reference_clock_start))
+    scenario=compile_document(scenario.document,resources,plugins,runner.state)
+    manifest=_manifest(scenario,root_seed,run_index,locale,base)
     invariants=tuple((item["id"],compile_expression(item["check"],resources)) for item in scenario.document.invariants)
 
     def execute_invocation(control_id,target,bindings,scope,repetitions,path):
@@ -77,7 +124,7 @@ def _execute(scenario, root_seed, run_index, locale, inputs):
         child_scope=evaluate_bindings(bindings,compile_expression,runner.state.snapshot(),resources,scope)
         old=runner.address; runner.address=runner.address.with_subflow_invocation(invocation_component(control_id,target))
         for index in repetitions: runner.address=runner.address.with_repetition(index)
-        try: execute_sequence(compile_scoped_sequence(scenario.document.subflows[target],resources,child_scope),child_scope,path+(control_id,))
+        try: execute_sequence(compile_scoped_sequence(scenario.document.subflows[target],resources,child_scope,plugins,runner.state),child_scope,path+(control_id,))
         finally: runner.address=old
 
     def execute_sequence(steps,scope=None,path=()):
@@ -116,20 +163,20 @@ def _execute(scenario, root_seed, run_index, locale, inputs):
                     bindings=dict(repeat["with"]); child=evaluate_bindings(bindings,compile_expression,runner.state.snapshot(),resources,scope)
                     if "index_as" in repeat: child=MappingProxyType({**dict(child),repeat["index_as"]:index})
                     old=runner.address; runner.address=runner.address.with_subflow_invocation(invocation_component(node.step_id,repeat["subflow"])).with_repetition(index)
-                    try: execute_sequence(compile_scoped_sequence(scenario.document.subflows[repeat["subflow"]],resources,child),child,path+(node.step_id,))
+                    try: execute_sequence(compile_scoped_sequence(scenario.document.subflows[repeat["subflow"]],resources,child,plugins,runner.state),child,path+(node.step_id,))
                     finally: runner.address=old
     execute_sequence(scenario.steps)
     provenance=ScenarioProvenance(tuple(records))
     return ScenarioResult(scenario.scenario_id,runner,manifest,resources,provenance),tuple(applied),provenance
 
 
-def run_scenario(scenario: CompiledScenario,root_seed,run_index=0,locale="C",inputs=None):
-    return _execute(scenario,root_seed,run_index,locale,inputs)[0]
+def run_scenario(scenario: CompiledScenario,root_seed,run_index=0,locale="C",inputs=None,plugins=None):
+    return _execute(scenario,root_seed,run_index,locale,inputs,plugins)[0]
 
 
-def evaluate_scenario(scenario: CompiledScenario,root_seed,run_index=0,locale="C",inputs=None,raise_on_mismatch=False):
+def evaluate_scenario(scenario: CompiledScenario,root_seed,run_index=0,locale="C",inputs=None,raise_on_mismatch=False,plugins=None):
     result=None; observed_c=(); observed_i=(); applied=(); provenance=ScenarioProvenance()
-    try: result,applied,provenance=_execute(scenario,root_seed,run_index,locale,inputs); manifest=result.manifest
+    try: result,applied,provenance=_execute(scenario,root_seed,run_index,locale,inputs,plugins); manifest=result.manifest
     except ConstraintViolation as error:
         observed_c=(error.constraint_id,); applied=error.applied_faults; provenance=error.provenance; manifest=error.manifest
     except InvariantViolation as error:
@@ -151,13 +198,14 @@ def evaluate_scenario(scenario: CompiledScenario,root_seed,run_index=0,locale="C
     return evaluation
 
 
-def replay_scenario(yaml_text,manifest,*,inputs=None):
+def replay_scenario(yaml_text,manifest,*,inputs=None,plugins=None):
     document=parse_yaml(yaml_text); scenario=compile_document(document)
     base=resolve_resources(document.resources,inputs)
+    registry=_registry(plugins); _prevalidate_plugins(document,registry)
     expected={"scenario_canonical_hash":canonical_scenario_hash(scenario),"engine_version":ENGINE_VERSION,"dsl_version":document.dsl_version,
-        "rng_algorithm_version":RNG_VERSION,"id_algorithm_version":ID_VERSION,"generator_versions":GENERATOR_VERSIONS,"reference_clock_start":document.reference_clock_start}
+        "rng_algorithm_version":RNG_VERSION,"id_algorithm_version":ID_VERSION,"generator_versions":_generator_versions(document),"reference_clock_start":document.reference_clock_start}
     for field,current in expected.items():
         if getattr(manifest,field)!=current: raise ReplayCompatibilityError(f"{field} mismatch")
     if manifest.input_resource_hashes!=base.hashes(): raise ReplayCompatibilityError("input_resource_hashes mismatch")
     if manifest.domain_pack_versions: raise ReplayCompatibilityError("domain_pack_versions unsupported in Phase 0.2A")
-    return run_scenario(scenario,manifest.root_seed,manifest.run_index,locale=manifest.locale,inputs=inputs)
+    return run_scenario(scenario,manifest.root_seed,manifest.run_index,locale=manifest.locale,inputs=inputs,plugins=registry)

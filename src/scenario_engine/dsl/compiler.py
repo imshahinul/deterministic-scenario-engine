@@ -13,6 +13,7 @@ from scenario_engine.expressions import (
 )
 from scenario_engine.runner import StepSpec
 from scenario_engine.expressions import resolve_semantic_path
+from scenario_engine.plugins import PluginRegistry, invoke_plugin
 
 from .errors import DSLCompilationError
 from .models import CompiledScenario, CompiledStep, ScenarioDocument
@@ -42,6 +43,23 @@ class IntegerGenerator:
 
     def generate(self, context: GenerationContext) -> int:
         return context.rng().inclusive_int(self.minimum, self.maximum)
+
+
+@dataclass(frozen=True, slots=True)
+class PluginGenerator:
+    name: str
+    version: str
+    arguments: Mapping[str, Expression]
+    registry: PluginRegistry
+    state: Mapping[str, Any]
+
+    def generate(self, context: GenerationContext) -> Any:
+        from scenario_engine.expressions import EvaluationEnvironment
+
+        state = self.state.snapshot() if hasattr(self.state, "snapshot") else self.state
+        environment = EvaluationEnvironment(state, MappingProxyType({}), MappingProxyType({}))
+        arguments = {name: expression.evaluate(environment) for name, expression in self.arguments.items()}
+        return invoke_plugin(self.registry.require(self.name, self.version), context, arguments)
 
 
 def _expression(node: Mapping[str, Any], resources=None, scope=None) -> Expression:
@@ -82,7 +100,7 @@ def _expression(node: Mapping[str, Any], resources=None, scope=None) -> Expressi
     raise AssertionError("validated expression operator was not compiled")
 
 
-def _generator(node: Mapping[str, Any]) -> Any:
+def _generator(node: Mapping[str, Any], resources=None, scope=None, plugins=None, state=None) -> Any:
     operator, payload = next(iter(node.items()))
     if operator == "$int":
         return IntegerGenerator(payload[0], payload[1])
@@ -90,6 +108,13 @@ def _generator(node: Mapping[str, Any]) -> Any:
         return LogicalIDGenerator(payload)
     if operator == "$literal":
         return LiteralGenerator(decode_semantic_value(payload))
+    if operator == "$plugin":
+        arguments = MappingProxyType({
+            name: _expression(expression, resources, scope)
+            for name, expression in payload.get("args", {}).items()
+        })
+        return PluginGenerator(payload["name"], payload["version"], arguments,
+                               plugins or PluginRegistry(), state or MappingProxyType({}))
     raise AssertionError("validated generator operator was not compiled")
 
 
@@ -164,13 +189,14 @@ def _validate_control(document):
     for name in sorted(graph): visit(name)
 
 
-def _compile_step(step, resources, scope=None):
+def _compile_step(step, resources, scope=None, plugins=None, state=None):
     if step.control_kind is not None:
         return step
     transition = step.transition
     spec = StepSpec(
         step.step_id,
-        MappingProxyType({name: _generator(node) for name, node in step.generate.items()}),
+        MappingProxyType({name: _generator(node, resources, scope, plugins, state)
+                          for name, node in step.generate.items()}),
         MappingProxyType({name: _expression(node, resources, scope) for name, node in step.derive.items()}),
         MappingProxyType({name: _expression(node, resources, scope) for name, node in step.write.items()}),
         step.advance, emit=_emitter(step.emit, resources, scope), transition=lambda state, target=transition: target,
@@ -178,14 +204,16 @@ def _compile_step(step, resources, scope=None):
     return CompiledStep(spec, transition)
 
 
-def compile_document(document: ScenarioDocument, resources=None) -> CompiledScenario:
+def compile_document(document: ScenarioDocument, resources=None, plugins=None,
+                     state=None) -> CompiledScenario:
     _validate_sequence(document.steps, "$.steps")
     for name, steps in document.subflows.items(): _validate_sequence(steps, f"$.subflows.{name}.steps")
     _validate_control(document)
     compiled: list[Any] = []
     for step in document.steps:
-        compiled.append(_compile_step(step, resources))
-    subflows = MappingProxyType({name: tuple(_compile_step(step, resources) for step in steps) for name, steps in document.subflows.items()})
+        compiled.append(_compile_step(step, resources, plugins=plugins, state=state))
+    subflows = MappingProxyType({name: tuple(_compile_step(step, resources, plugins=plugins, state=state)
+        for step in steps) for name, steps in document.subflows.items()})
     return CompiledScenario(
         document.scenario_id, document.reference_clock_start, document.initial_state,
         tuple(compiled), compiled[0].step_id, document, resources, subflows,
@@ -200,5 +228,5 @@ def compile_expression(node: Mapping[str, Any], resources, scope=None) -> Expres
     return _expression(node, resources, scope)
 
 
-def compile_scoped_sequence(steps, resources, scope):
-    return tuple(_compile_step(step, resources, scope) for step in steps)
+def compile_scoped_sequence(steps, resources, scope, plugins=None, state=None):
+    return tuple(_compile_step(step, resources, scope, plugins, state) for step in steps)
