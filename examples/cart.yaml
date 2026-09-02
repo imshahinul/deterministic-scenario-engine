@@ -1,0 +1,94 @@
+dsl_version: 1
+scenario: cart_checkout
+
+clock:
+  start: "2026-01-01T12:00:00Z"
+
+initial_state:
+  cart_total:
+    $decimal: "0.00"
+  cart_items: []
+  cart_id: null
+  last_item_id: null
+  checkout_complete: false
+
+steps:
+  - id: create_cart
+    generate:
+      cart_id:
+        $id: cart
+    write:
+      cart_id:
+        $local: cart_id
+    emit:
+      - type: cart_created
+        fields:
+          cart_id:
+            $state: cart_id
+    advance:
+      seconds: 1
+    transition: add_item
+
+  - id: add_item
+    generate:
+      item_id:
+        $id: cart_item
+      quantity:
+        $int: [1, 4]
+      unit_price:
+        $literal:
+          $decimal: "19.99"
+    derive:
+      item_subtotal:
+        $mul:
+          - $local: unit_price
+          - $local: quantity
+      next_cart_items:
+        $append:
+          list:
+            $state: cart_items
+          value:
+            $object:
+              item_id:
+                $local: item_id
+              quantity:
+                $local: quantity
+              subtotal:
+                $derived: item_subtotal
+      next_cart_total:
+        $sum_field:
+          source:
+            $derived: next_cart_items
+          field: subtotal
+    write:
+      cart_items:
+        $derived: next_cart_items
+      cart_total:
+        $derived: next_cart_total
+      last_item_id:
+        $local: item_id
+    emit:
+      - type: cart_item_added
+        fields:
+          item_id:
+            $state: last_item_id
+          cart_total:
+            $state: cart_total
+    advance:
+      seconds: 3
+    transition: checkout
+
+  - id: checkout
+    write:
+      checkout_complete:
+        $literal: true
+    emit:
+      - type: cart_checked_out
+        fields:
+          cart_id:
+            $state: cart_id
+          cart_total:
+            $state: cart_total
+    advance:
+      seconds: 2
+    transition: null

@@ -1,0 +1,22 @@
+dsl_version: 1
+scenario: sqlalchemy_rows
+clock:
+  start: "2026-01-01T00:00:00Z"
+initial_state: {}
+steps:
+  - id: customer
+    emit:
+      - type: sqlalchemy_row
+        fields:
+          table: {$literal: customers}
+          values:
+            $literal: {id: customer-001, name: Ada}
+    transition: order
+  - id: order
+    emit:
+      - type: sqlalchemy_row
+        fields:
+          table: {$literal: orders}
+          values:
+            $literal: {id: order-001, customer_id: customer-001, amount: 42}
+    transition: null

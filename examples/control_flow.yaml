@@ -1,0 +1,59 @@
+dsl_version: 1
+scenario: phase04_control_flow
+clock: {start: "2026-01-01T00:00:00Z"}
+initial_state: {attempts: []}
+resources:
+  order:
+    premium: {$input: premium}
+    retry_count: {$input: retry_count}
+    customer_id: {$input: customer_id}
+subflows:
+  premium_treatment:
+    steps:
+      - id: premium_step
+        write: {treatment: {$scope: treatment}}
+        transition: null
+  standard_treatment:
+    steps:
+      - id: standard_step
+        write: {treatment: {$scope: treatment}}
+        transition: null
+  payment_attempt:
+    steps:
+      - id: payment_attempt_step
+        generate: {attempt_id: {$id: attempt}}
+        write:
+          attempts:
+            $append:
+              list: {$state: attempts}
+              value:
+                $object:
+                  index: {$scope: attempt_index}
+                  id: {$local: attempt_id}
+                  customer: {$scope: customer_id}
+        emit:
+          - type: payment_attempt
+            fields: {attempts: {$state: attempts}}
+        transition: null
+steps:
+  - id: choose_treatment
+    branch:
+      cases:
+        - when: {$eq: [{$resource: order.premium}, {$literal: true}]}
+          subflow: premium_treatment
+          with: {treatment: {$literal: premium}}
+      else:
+        subflow: standard_treatment
+        with: {treatment: {$literal: standard}}
+    transition: retry_payment
+  - id: retry_payment
+    repeat:
+      count: {$resource: order.retry_count}
+      max: 3
+      subflow: payment_attempt
+      index_as: attempt_index
+      with: {customer_id: {$resource: order.customer_id}}
+    transition: finalize
+  - id: finalize
+    write: {status: {$literal: finalized}}
+    transition: null

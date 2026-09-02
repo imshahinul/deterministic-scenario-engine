@@ -1,0 +1,40 @@
+dsl_version: 1
+scenario: property_api_order
+clock: {start: "2026-08-01T10:00:00Z"}
+resources:
+  customer_id: {$input: customer_id}
+  email_domain: {$input: email_domain}
+  quantity: {$input: quantity}
+initial_state:
+  status: new
+  customer_id: null
+  customer_email: null
+  order_number: null
+  quantity: 0
+steps:
+  - id: create_order
+    generate:
+      customer_email:
+        $plugin:
+          name: ecommerce.customer_email
+          version: "1"
+          args: {prefix: {$literal: buyer}, domain: {$resource: email_domain}}
+      order_number:
+        $plugin:
+          name: ecommerce.order_number
+          version: "1"
+          args: {prefix: {$literal: API}}
+    write:
+      customer_id: {$resource: customer_id}
+      customer_email: {$local: customer_email}
+      order_number: {$local: order_number}
+      quantity: {$resource: quantity}
+      status: {$literal: order_created}
+    emit:
+      - type: order_created
+        fields:
+          customer_email: {$state: customer_email}
+          order_number: {$state: order_number}
+          quantity: {$state: quantity}
+    advance: {seconds: 1}
+    transition: null
