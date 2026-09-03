@@ -2,19 +2,20 @@
 
 This guide runs the canonical cart history without optional dependencies.
 
-## 1. Install from a source checkout
+## 1. Install
 
-Run from the repository root:
+Install the package:
+
+```console
+python3 -m pip install deterministic-scenario-engine
+```
+
+To install from a source checkout instead, run from the repository root:
 
 ```console
 python3 -m venv /tmp/scenario-engine-quickstart
 /tmp/scenario-engine-quickstart/bin/python -m pip install .
 ```
-
-This installs the local source checkout. The unpublished release-candidate
-distribution is `deterministic-scenario-engine` 1.0.0. Only after a future
-publication will `pip install deterministic-scenario-engine` install it from a
-package index; this documentation does not claim current PyPI availability.
 
 ## 2. Read the DSL document
 

@@ -119,13 +119,21 @@ class Phase10EPackagingReleaseCandidateTests(unittest.TestCase):
             historical_payload["manifest"].pop("engine_version")
             self.assertEqual(current_payload, historical_payload)
 
-    def test_docs_state_future_install_without_false_publication_claim(self):
+    def test_docs_are_publication_ready_without_temporal_or_host_claims(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         quickstart = (ROOT / "docs" / "quickstart.md").read_text(encoding="utf-8")
         combined = f"{readme}\n{quickstart}".lower()
         self.assertIn("pip install deterministic-scenario-engine", combined)
-        self.assertIn("not currently\navailable from pypi", combined)
-        self.assertIn("only after a future\npublication", combined)
+        for stale_claim in (
+            "unpublished",
+            "future publication",
+            "not currently available from pypi",
+            "has not been published",
+        ):
+            with self.subTest(stale_claim=stale_claim):
+                self.assertNotIn(stale_claim, combined)
+        self.assertNotIn("github.com/", combined)
+        self.assertNotIn("published to pypi", combined)
 
     def test_top_level_api_is_unchanged_by_version_authority_module(self):
         self.assertNotIn("VERSION", scenario_engine.__all__)

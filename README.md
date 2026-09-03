@@ -49,12 +49,9 @@ Install only the named optional integrations you need:
 /tmp/scenario-engine-docs-venv/bin/python -m pip install '.[schemathesis]'
 ```
 
-These are local-source commands, not a claim that a public package exists. The
-local, unpublished release-candidate distribution is
-`deterministic-scenario-engine` 1.0.0. After a future publication, the intended
-package command will be `pip install deterministic-scenario-engine`, with extras
-such as `pip install 'deterministic-scenario-engine[pytest]'`. It is not currently
-available from PyPI; release-candidate validation installs locally built artifacts.
+The distribution is `deterministic-scenario-engine` 1.0.0. Install the package
+with `pip install deterministic-scenario-engine`, or select an optional integration
+with a command such as `pip install 'deterministic-scenario-engine[pytest]'`.
 
 ## Minimal quickstart
 
@@ -114,6 +111,5 @@ Unsupported cross-version replay fails explicitly. See the [determinism model](d
 
 ## Status
 
-This repository represents the frozen, unpublished local 1.0 release candidate.
-Its distribution and engine compatibility version are both 1.0.0, and it is
-licensed under Apache-2.0. It has not been published to PyPI or any Git host.
+The distribution and engine compatibility version are both 1.0.0. The project is
+licensed under Apache-2.0.
