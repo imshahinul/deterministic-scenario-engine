@@ -86,7 +86,7 @@ class ReproducibleResultTests(unittest.TestCase):
 
     def test_manifest_uses_explicit_engine_and_algorithm_versions(self):
         manifest = run_scenario(compiled(), "seed").manifest
-        self.assertEqual(ENGINE_VERSION, "0.2.0.dev0")
+        self.assertEqual(ENGINE_VERSION, "1.0.0")
         self.assertEqual(manifest.rng_algorithm_version, RNG_VERSION)
         self.assertEqual(manifest.id_algorithm_version, ID_VERSION)
         self.assertEqual(dict(manifest.generator_versions), dict(GENERATOR_VERSIONS))

@@ -5,8 +5,8 @@ symbols not listed here are not implicitly promoted to top-level public API.
 
 ## Constants and value objects
 
-- `ENGINE_VERSION` — engine compatibility version recorded in manifests; not
-  the current distribution version.
+- `ENGINE_VERSION` — engine compatibility version recorded in manifests; for
+  the 1.0 release candidate it intentionally equals distribution version 1.0.0.
 - `MISSING` — singleton semantic missing value, distinct from null.
 - `LogicalID(value: str)` — deterministic logical identifier value; users
   normally receive it from `$id` generation.

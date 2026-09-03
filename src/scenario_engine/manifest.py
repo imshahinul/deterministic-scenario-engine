@@ -10,10 +10,11 @@ from typing import Any, Mapping
 from .errors import ScenarioEngineError
 from .ids import ID_VERSION
 from .rng import RNG_VERSION
+from ._version import VERSION
 from .values import normalize
 
 
-ENGINE_VERSION = "0.2.0.dev0"
+ENGINE_VERSION = VERSION
 GENERATOR_VERSIONS = MappingProxyType({"int": RNG_VERSION, "logical_id": ID_VERSION})
 
 

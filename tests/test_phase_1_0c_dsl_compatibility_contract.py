@@ -20,8 +20,8 @@ from scenario_engine.manifest import ReplayCompatibilityError
 
 
 ROOT = Path(__file__).parents[1]
-CART_HASH = "ea85ecfe3d6014f10481637db4e8a137d00ffab0bdcfe4ed070f0b1404ee123e"
-FLOW_HASH = "73de01131fa12f904dee388a5ba04d11f8001ddde2a6d6b94e10b0ded0a75c61"
+CART_HASH = "cffc2e482f304ab18d39f96166e3e1be78b117a86bf0ce8ad0e22973677001b5"
+FLOW_HASH = "86511d8c750272283eb1039a6e1039c8faa11cb5945c76aec41d9f5a71588e2b"
 ENV = EvaluationEnvironment({}, {}, {})
 
 
@@ -174,7 +174,7 @@ class ResultManifestCompatibilityTests(unittest.TestCase):
         self.assertEqual(first.to_json_bytes(), second.to_json_bytes())
         self.assertEqual(
             sha256(first.to_json_bytes()).hexdigest(),
-            "cd28c9fdadef67267aa7f0dc950dd5d19331dc30c3d84636d0c678f481ac16b8",
+            "5760aee1293d2d264d841621de08734358b3eb4ca54ef3e08e5a0b97f8f16cdd",
         )
 
 

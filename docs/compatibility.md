@@ -1,13 +1,13 @@
 # Scenario Engine 1.0 compatibility contract
 
 This document is normative for the frozen DSL, deterministic result, manifest,
-and plugin contracts. It is not distribution or release metadata.
+and plugin contracts. Distribution metadata remains a packaging concern.
 
 ## Version roles
 
 `ENGINE_VERSION` is the engine compatibility/replay contract version recorded
-in every `ReproducibilityManifest`; it is not presently the distribution
-version. Phase 1.0E must decide whether those versions become identical.
+in every `ReproducibilityManifest`. For the 1.0 release candidate it is 1.0.0
+and intentionally equals the distribution version.
 
 Engine SemVer has these meanings:
 

@@ -11,8 +11,10 @@ python3 -m venv /tmp/scenario-engine-quickstart
 /tmp/scenario-engine-quickstart/bin/python -m pip install .
 ```
 
-The public distribution identity is not finalized; this installs the local
-checkout only.
+This installs the local source checkout. The unpublished release-candidate
+distribution is `deterministic-scenario-engine` 1.0.0. Only after a future
+publication will `pip install deterministic-scenario-engine` install it from a
+package index; this documentation does not claim current PyPI availability.
 
 ## 2. Read the DSL document
 

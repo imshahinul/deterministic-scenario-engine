@@ -31,7 +31,7 @@ make expected behavior explicit.
 Core execution does not require a database, network service, plugin, or property
 testing framework. See [security assumptions and non-goals](docs/security-and-non-goals.md).
 
-## Installation from source
+## Installation
 
 From a source checkout, use a virtual environment and install the checkout:
 
@@ -50,8 +50,11 @@ Install only the named optional integrations you need:
 ```
 
 These are local-source commands, not a claim that a public package exists. The
-final public distribution identity and release metadata are deferred to release
-packaging.
+local, unpublished release-candidate distribution is
+`deterministic-scenario-engine` 1.0.0. After a future publication, the intended
+package command will be `pip install deterministic-scenario-engine`, with extras
+such as `pip install 'deterministic-scenario-engine[pytest]'`. It is not currently
+available from PyPI; release-candidate validation installs locally built artifacts.
 
 ## Minimal quickstart
 
@@ -111,6 +114,6 @@ Unsupported cross-version replay fails explicitly. See the [determinism model](d
 
 ## Status
 
-This repository represents the frozen pre-publication 1.0 API, DSL, result,
-manifest, and compatibility contract. It has not yet been published. Packaging,
-final distribution identity, final versioning, and licensing remain deferred.
+This repository represents the frozen, unpublished local 1.0 release candidate.
+Its distribution and engine compatibility version are both 1.0.0, and it is
+licensed under Apache-2.0. It has not been published to PyPI or any Git host.

@@ -94,8 +94,8 @@ class Phase10DDocumentationExampleTests(unittest.TestCase):
             compile_document(parse_yaml(flow_text)), "s",
             inputs={"premium": True, "retry_count": 2, "customer_id": "customer-1"},
         )
-        self.assertEqual(sha256(cart.to_json_bytes()).hexdigest(), "ea85ecfe3d6014f10481637db4e8a137d00ffab0bdcfe4ed070f0b1404ee123e")
-        self.assertEqual(sha256(flow.to_json_bytes()).hexdigest(), "73de01131fa12f904dee388a5ba04d11f8001ddde2a6d6b94e10b0ded0a75c61")
+        self.assertEqual(sha256(cart.to_json_bytes()).hexdigest(), "cffc2e482f304ab18d39f96166e3e1be78b117a86bf0ce8ad0e22973677001b5")
+        self.assertEqual(sha256(flow.to_json_bytes()).hexdigest(), "86511d8c750272283eb1039a6e1039c8faa11cb5945c76aec41d9f5a71588e2b")
 
     def test_oracle_and_ecommerce_examples(self):
         oracle = compile_document(parse_yaml(text(ROOT / "examples/oracle_fault.yaml")))
@@ -129,7 +129,7 @@ class Phase10DDocumentationExampleTests(unittest.TestCase):
         expected = text(ROOT / "docs/compatibility.md")
         self.assertEqual(
             sha256(expected.encode()).hexdigest(),
-            "1a392e67f1282e721ce0ccd8d183edc56a691db30210f94c37e11f8a41043d28",
+            "0cf842858a5fe2a4fd9b6151158cb176e147f6a926ef5932e8f32cb35cfe0f96",
         )
 
 
