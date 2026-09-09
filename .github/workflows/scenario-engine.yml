@@ -1,0 +1,117 @@
+name: Deterministic scenario evidence
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scenario-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+      - name: Use Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Scenario Engine
+        run: python -m pip install .
+      - name: Produce and verify deterministic evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+
+          scenario --json validate examples/cart.yaml > artifacts/validation.json
+          scenario --json hash examples/cart.yaml > artifacts/semantic-hash.json
+          scenario --json run examples/cart.yaml \
+            --seed phase-2-10-ci --run-index 0 --locale en_US \
+            > artifacts/result.json
+          scenario --json run examples/cart.yaml \
+            --seed phase-2-10-ci --run-index 0 --locale en_US \
+            > artifacts/result-repeat.json
+          cmp artifacts/result.json artifacts/result-repeat.json
+
+          scenario --json inspect artifacts/result.json > artifacts/inspection.json
+          scenario --json diff artifacts/result.json artifacts/result-repeat.json \
+            --mode complete > artifacts/equal-diff.json
+
+          python - <<'PY'
+          import json
+          from datetime import datetime
+          from pathlib import Path
+
+          from scenario_engine import ReproducibilityManifest
+          from scenario_engine.suite import (
+              CompatibilityRecord,
+              ExecutionContext,
+              ExecutionReplaySupport,
+              RunManifestEnvelope,
+              canonical_suite_bytes,
+          )
+
+          result = json.loads(Path("artifacts/result.json").read_bytes())
+          manifest_value = result["manifest"]
+          manifest_value["reference_clock_start"] = datetime.fromisoformat(
+              manifest_value["reference_clock_start"]["value"]
+          )
+          manifest = ReproducibilityManifest(**manifest_value)
+          envelope = RunManifestEnvelope(
+              root_scenario_identity=result["scenario_id"],
+              execution_context=ExecutionContext(
+                  manifest.root_seed,
+                  manifest.run_index,
+                  manifest.locale,
+                  manifest.reference_clock_start,
+              ),
+              compatibility=CompatibilityRecord(
+                  "scenario-engine/1.0.0",
+                  ExecutionReplaySupport.SUPPORTED,
+              ),
+              child_manifest=manifest,
+          )
+          Path("artifacts/replay-manifest.json").write_bytes(
+              canonical_suite_bytes(envelope)
+          )
+          PY
+          scenario --json replay artifacts/replay-manifest.json \
+            --scenario examples/cart.yaml > artifacts/replay-result.json
+          cmp artifacts/result.json artifacts/replay-result.json
+
+          scenario --json matrix examples/cart.yaml \
+            --seed phase-2-10-ci --locale en_US \
+            --dimensions '[{"name":"ci_case","values":["primary","secondary"]}]' \
+            --describe > artifacts/matrix.json
+          CASE_ID="$(python -c 'import json; print(json.load(open("artifacts/matrix.json", encoding="utf-8"))["cases"][0]["case_id"])')"
+          scenario --json matrix examples/cart.yaml \
+            --seed phase-2-10-ci --locale en_US \
+            --dimensions '[{"name":"ci_case","values":["primary","secondary"]}]' \
+            --case "$CASE_ID" > artifacts/matrix-result.json
+
+          cat > artifacts/batch-plan.json <<'JSON'
+          {"runs":[{"id":"cart-primary","locale":"en_US","run_index":0,"scenario":"../examples/cart.yaml","seed":"phase-2-10-ci"},{"id":"cart-secondary","locale":"en_US","run_index":1,"scenario":"../examples/cart.yaml","seed":"phase-2-10-ci"}]}
+          JSON
+          scenario --json batch artifacts/batch-plan.json \
+            --workers 2 --max-in-flight 2 > artifacts/batch-result.json
+
+          scenario --json run examples/cart.yaml \
+            --seed phase-2-10-ci --run-index 1 --locale en_US \
+            > artifacts/changed-result.json
+          set +e
+          scenario --json diff artifacts/result.json artifacts/changed-result.json \
+            --mode first > artifacts/different-diff.json
+          DIFF_STATUS=$?
+          set -e
+          test "$DIFF_STATUS" -eq 1
+      - name: Retain deterministic developer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: scenario-engine-evidence
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 7
