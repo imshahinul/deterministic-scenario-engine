@@ -472,3 +472,28 @@ checkpoint, the following require an explicit user decision before reopening:
 9. final tagging, GitHub Release creation, or PyPI publication.
 
 Until separately authorized, `PHASE3_IMPLEMENTATION_STARTED=NO`.
+
+## 20. Phase 3.1 implementation resolution
+
+The separately authorized 3.1 checkpoint implements the declarative contract in
+the additive `scenario_engine.evidence` subpackage. The first independent schema
+family is `evidence.bundle/1`, `evidence.entry/1`,
+`evidence.relationship/1`, and `evidence.provenance/1`. Bundle entries are sorted
+by logical ID; relationships are sorted by `(source_id, kind, target_id)`.
+Duplicate IDs, duplicate and case-fold-colliding paths, dangling/self/duplicate
+relationships, malformed hashes, unsupported schema versions, and invalid
+relative POSIX path values fail during model construction.
+
+The canonical index is compact, key-sorted UTF-8 JSON with no trailing newline.
+The bundle ID is lowercase SHA-256 over those exact canonical bytes; the derived
+`bundle_id` property is omitted from its own hash envelope. Models use no clock,
+randomness, environment, network, discovery, imports named by data, or I/O.
+
+Phase 3.1 enforces intrinsic limits of 100,000 entries, 100,000 relationships,
+16 MiB canonical index bytes, 256 MiB declared bytes per artifact, and 64 path
+segments. It declares the 256 MiB default and 4 GiB hard aggregate-operation
+ceilings for later operations. Aggregate physical bytes, native child-schema
+limits, semantic payload depth, filesystem materialization, symlinks and special
+files require actual input bytes or a filesystem root and are therefore deferred
+to the bounded 3.2 reader/validator (and later exporters). This resolution adds
+no reader, exporter, adapter, migration, CLI, execution, or retrieval behavior.
