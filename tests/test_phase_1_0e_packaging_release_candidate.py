@@ -52,8 +52,9 @@ class Phase10EPackagingReleaseCandidateTests(unittest.TestCase):
             self.config["tool"]["setuptools"]["dynamic"]["version"]["attr"],
             "scenario_engine._version.VERSION",
         )
-        self.assertEqual(VERSION, "1.0.0")
-        self.assertEqual(ENGINE_VERSION, VERSION)
+        # Phase 2 changes package identity, not the frozen deterministic contract.
+        self.assertEqual(VERSION, "2.0.0")
+        self.assertEqual(ENGINE_VERSION, "1.0.0")
 
     def test_license_readme_and_build_backend_metadata(self):
         self.assertEqual(self.project["license"], "Apache-2.0")
@@ -124,8 +125,8 @@ class Phase10EPackagingReleaseCandidateTests(unittest.TestCase):
         quickstart = (ROOT / "docs" / "quickstart.md").read_text(encoding="utf-8")
         combined = f"{readme}\n{quickstart}".lower()
         self.assertIn("pip install deterministic-scenario-engine", combined)
+        # The historical 1.0 distribution is published; the 2.0 candidate is not.
         for stale_claim in (
-            "unpublished",
             "future publication",
             "not currently available from pypi",
             "has not been published",

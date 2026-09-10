@@ -4,9 +4,10 @@
 
 Deterministic Scenario Engine (DSE) creates reproducible, state-consistent
 business histories and deterministic scenario suites with ground truth for
-testing. The Phase 2 contract is frozen in this source tree for the upcoming
-2.0 release; it is not a published 2.0.0 release, and package metadata remains
-1.0.0 until release-candidate preparation.
+testing. The Phase 2 contract is frozen in this source tree as an unpublished
+2.0.0 release candidate; no PyPI or GitHub release has occurred yet. Its
+distribution version is 2.0.0 while its deterministic compatibility version
+remains `ENGINE_VERSION == "1.0.0"` and its DSL version remains integer 1.
 
 ## Why it exists
 
@@ -61,7 +62,7 @@ Install only the named optional integrations you need:
 /tmp/scenario-engine-docs-venv/bin/python -m pip install '.[schemathesis]'
 ```
 
-The distribution is `deterministic-scenario-engine` 1.0.0. Install the package
+The release-candidate distribution is `deterministic-scenario-engine` 2.0.0. Install the package
 with `pip install deterministic-scenario-engine`, or select an optional integration
 with a command such as `pip install 'deterministic-scenario-engine[pytest]'`.
 
@@ -124,6 +125,9 @@ Unsupported cross-version replay fails explicitly. See the [determinism model](d
 
 ## Status
 
-The currently published distribution and engine compatibility version are both
-1.0.0. Phase 2 is an upcoming 2.0 contract in this development tree, not a
-published release. The project is licensed under Apache-2.0.
+Distribution release identity and deterministic engine compatibility are
+separate contracts: this unpublished candidate has distribution version 2.0.0,
+but generated core manifests retain `ENGINE_VERSION` 1.0.0 and DSL 1. Phase 2
+suite, composition, matrix, inspection, diff, Domain Pack, and Oracle Assertion
+contracts keep their own explicit schema versions. No 2.0.0 tag or publication
+has occurred. The project is licensed under Apache-2.0.

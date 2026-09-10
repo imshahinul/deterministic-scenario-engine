@@ -151,4 +151,4 @@ def test_bounds_are_exact_and_fail_deterministically(monkeypatch) -> None:
 
 def test_root_api_and_package_version_remain_frozen() -> None:
     assert "inspect_result" not in scenario_engine.__all__
-    assert VERSION == "1.0.0"
+    assert VERSION == "2.0.0"
