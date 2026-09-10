@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import re
+import runpy
 import subprocess
 import sys
 
@@ -11,6 +12,7 @@ import yaml
 
 ROOT = Path(__file__).parents[1]
 WORKFLOW = ROOT / ".github/workflows/scenario-engine.yml"
+VERSION = runpy.run_path(ROOT / "src/scenario_engine/_version.py")["VERSION"]
 
 
 def _workflow_text() -> str:
@@ -106,7 +108,10 @@ def test_fresh_tree_wheel_supports_workflow_public_commands(tmp_path: Path) -> N
         stderr=subprocess.PIPE,
         check=True,
     )
-    wheel = next(wheelhouse.glob("deterministic_scenario_engine-1.0.0-*.whl"))
+    wheels = list(wheelhouse.glob(f"deterministic_scenario_engine-{VERSION}-*.whl"))
+    assert VERSION == "2.0.0"
+    assert len(wheels) == 1
+    wheel = wheels[0]
     installed = tmp_path / "installed"
     subprocess.run(
         [sys.executable, "-m", "pip", "install", "--no-deps", "--target", str(installed), str(wheel)],
@@ -115,6 +120,24 @@ def test_fresh_tree_wheel_supports_workflow_public_commands(tmp_path: Path) -> N
         check=True,
     )
     env = {"PYTHONPATH": str(installed)}
+    identity = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import importlib.metadata, scenario_engine; "
+            "print(importlib.metadata.version('deterministic-scenario-engine')); "
+            "print(scenario_engine.__file__)",
+        ],
+        cwd=fresh,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+        text=True,
+    )
+    distribution_version, import_path = identity.stdout.splitlines()
+    assert distribution_version == VERSION == "2.0.0"
+    assert Path(import_path).is_relative_to(installed)
     validate = subprocess.run(
         [sys.executable, "-m", "scenario_engine.cli", "--json", "validate", "examples/cart.yaml"],
         cwd=fresh,
