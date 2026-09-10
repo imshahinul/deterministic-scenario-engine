@@ -1,7 +1,10 @@
 # Public Python API
 
-This is the canonical top-level Phase 1.0 contract. Importable implementation
-symbols not listed here are not implicitly promoted to top-level public API.
+This is the canonical top-level Phase 1.0 contract, preserved unchanged by the
+Phase 2 freeze. Importable implementation symbols not listed here are not
+implicitly promoted to top-level public API. Specialized Phase 2 APIs are
+public through the explicit subpackages documented below, not package-root
+convenience exports.
 
 ## Constants and value objects
 
@@ -151,3 +154,34 @@ These are explicitly separate from the top-level contract:
 
 Internal dataclass field layouts beyond frozen normalized result/manifest schemas
 are not promised. See [compatibility](compatibility.md).
+
+## Phase 2 public subpackages
+
+The complete machine-frozen names are each subpackage's `__all__`; these import
+paths are stable while helpers outside `__all__` are intentionally internal.
+
+- `scenario_engine.suite` — versioned run/suite/matrix/batch manifests and
+  bounded non-executing v1 result/manifest readers.
+- `scenario_engine.composition` — `ComposedSuite`, `load_composed_suite()`,
+  `execute_composed_suite()`, hashes, frozen bounds, and composition errors.
+- `scenario_engine.matrix` — `MatrixDimension`, `MatrixPlan`, expansion,
+  selection and execution with ordered Cartesian semantics, stable case IDs,
+  and retained original Cartesian indexes.
+- `scenario_engine.batch` — immutable `RunRequest`/`BatchPlan`, ordered
+  `execute_batch()`/`stream_batch()` results, stable failures, and bounds.
+- `scenario_engine.inspection` — immutable inspection/explanation documents,
+  read-only normalization, canonical serializers, and default secret redaction.
+- `scenario_engine.diff` — typed `SemanticDiff`/`DiffRecord` values using RFC
+  6901 paths, deterministic `first`/`complete` modes and prefix truncation.
+- `scenario_engine.cli` — `CLIExitCode` and `main`; command behavior is in the
+  [Phase 2 public contract](phase2-public-contract.md#cli-contract).
+- `scenario_engine.domain_packs` — immutable declarative `DomainPack` values,
+  caller-created `DomainPackRegistry`, exact deterministic resolution, semantic
+  identity, and declarative plugin requirements. There is no discovery, global
+  registry, or pack dependency mechanism.
+- `scenario_engine.oracle_assertions` — pure post-result structured assertion
+  models, evaluation, serializers, outcomes, and bounds; evaluation never reruns
+  or replays a scenario.
+
+The schema/version constants and all exact export manifests are executable
+contract tests. See the [complete Phase 2 contract](phase2-public-contract.md).

@@ -1,6 +1,8 @@
 # Quickstart
 
-This guide runs the canonical cart history without optional dependencies.
+This guide runs the canonical cart history without optional dependencies. The
+installed `scenario` console entry point is available in this Phase 2-capable
+source tree; `--json` is a global option and therefore precedes the command.
 
 ## 1. Install
 
@@ -94,3 +96,21 @@ top-level `ScenarioResult.state` attribute in the frozen public API.
 For inputs/resources, continue with [`examples/resources.yaml`](../examples/resources.yaml)
 and the [DSL reference](dsl-reference.md). For replay guarantees and limits, see
 [reproducibility](reproducibility.md) and [compatibility](compatibility.md).
+
+## 4. Phase 2 CLI path
+
+Run these from a source checkout after installation. Every source is an explicit
+local file, and every execution supplies its deterministic seed coordinate.
+
+```console
+scenario validate examples/cart.yaml
+scenario --json hash examples/cart.yaml
+scenario --json run examples/cart.yaml --seed quickstart --run-index 0 > /tmp/dse-result.json
+scenario --json inspect /tmp/dse-result.json --kind result
+scenario --json diff /tmp/dse-result.json /tmp/dse-result.json --kind result --mode first
+scenario --json matrix examples/cart.yaml --seed quickstart --dimensions '[{"name":"region","values":["us","eu"]}]' --describe
+```
+
+The diff exits 0 because the artifacts are equal. A valid unequal diff exits 1.
+For replay, batch-plan syntax, all flags, stdout/stderr rules and hard bounds,
+use the [Phase 2 public contract](phase2-public-contract.md#cli-contract).

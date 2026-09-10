@@ -70,6 +70,14 @@ Unsupported cross-version replay fails explicitly with
 `ReplayCompatibilityError`. Indefinite replay across incompatible future major
 contracts is not promised.
 
+Phase 2's read model may read, inspect, and semantically diff supported v1
+artifacts without executing them. That does not imply execution compatibility:
+Phase 2 does not contain a complete hidden v1 executor. For an incompatible v1
+manifest, use the frozen compatible v1 installation. Composed replay additionally
+requires explicit local root/module bytes matching recorded identities; matrix
+cases retain original Cartesian indexes and stable IDs; each batch member is
+independently replayable only under its recorded compatible contract.
+
 ## Frozen compatibility examples
 
 With the frozen test execution coordinates, canonical result SHA-256 values are:

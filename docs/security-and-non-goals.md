@@ -29,17 +29,30 @@ The SQLAlchemy adapter performs transactional post-result materialization.
 `ScenarioState` remains independent of the database; database contents are not
 the deterministic state store.
 
+Phase 2 composition accepts bounded UTF-8 regular files beneath an explicit
+local root. It rejects traversal components, absolute/URI/network paths,
+backslashes, symlinks at every component, root escape, nonregular files, nested
+composition, and portability case-fold collisions. YAML cannot dynamically
+import Python or modules. Plugins and Python-packaged Domain Packs are explicit,
+trusted, unsandboxed caller inputs; there is no automatic discovery or global
+registry. No ambient current directory, home, environment search path, or locale
+default becomes deterministic meaning.
+
 ## Explicit non-goals
 
 Scenario Engine does not provide:
 
 - an arbitrary Python DSL;
+- arbitrary Python execution from YAML or dynamic YAML imports;
 - arbitrary network execution or an API client;
-- automatic plugin discovery, entry-point loading, filesystem scanning, or
-  network retrieval;
+- hidden network calls, network imports, remote composition, or network retrieval;
+- automatic plugin or Domain Pack discovery, entry-point loading, filesystem
+  scanning, or global plugin/Domain Pack registries;
 - database-backed `ScenarioState`, ORM state, schema migration, or reflection-
   driven model discovery;
+- ORM-owned state or a raw SQL DSL;
 - unbounded loops or recursive subflows;
-- hidden randomness or hidden wall clock;
+- hidden randomness, wall-clock semantic dependence, or implicit environmental state;
+- automatic Schemathesis HTTP execution;
 - indefinite replay across incompatible major contracts;
 - a general-purpose sandbox, workflow engine, or database migration framework.

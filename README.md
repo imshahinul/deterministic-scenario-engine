@@ -2,8 +2,11 @@
 
 **Generate test scenarios, not just test records.**
 
-Deterministic Scenario Engine creates reproducible, state-consistent business
-histories with deterministic ground truth for testing.
+Deterministic Scenario Engine (DSE) creates reproducible, state-consistent
+business histories and deterministic scenario suites with ground truth for
+testing. The Phase 2 contract is frozen in this source tree for the upcoming
+2.0 release; it is not a published 2.0.0 release, and package metadata remains
+1.0.0 until release-candidate preparation.
 
 ## Why it exists
 
@@ -27,9 +30,18 @@ make expected behavior explicit.
 - an explicit, versioned plugin boundary and a reference ecommerce plugin pack
 - a JSON-file adapter
 - optional pytest, SQLAlchemy Core, Hypothesis, and Schemathesis integrations
+- secure, explicit local-file composition with namespaced modules
+- ordered Cartesian matrices with stable case IDs and original indexes
+- immutable ordered batch plans and worker-independent results
+- structured, redacted inspect/explain evidence and typed RFC 6901 semantic diff
+- nine-command `scenario` CLI for local and CI workflows
+- explicit immutable Domain Pack registries and pure Oracle Assertions
 
 Core execution does not require a database, network service, plugin, or property
 testing framework. See [security assumptions and non-goals](docs/security-and-non-goals.md).
+Phase 2 adds no hidden discovery, network, randomness, wall-clock, or ambient
+environment semantics. Its public imports, CLI contract, bounds, compatibility
+posture, and adoption guidance are frozen in the [Phase 2 public contract](docs/phase2-public-contract.md).
 
 ## Installation
 
@@ -108,8 +120,10 @@ Unsupported cross-version replay fails explicitly. See the [determinism model](d
 - [Public Python API](docs/api.md)
 - [Security assumptions and non-goals](docs/security-and-non-goals.md)
 - [Compatibility contract](docs/compatibility.md)
+- [Phase 2 public contract, CLI, and hard bounds](docs/phase2-public-contract.md)
 
 ## Status
 
-The distribution and engine compatibility version are both 1.0.0. The project is
-licensed under Apache-2.0.
+The currently published distribution and engine compatibility version are both
+1.0.0. Phase 2 is an upcoming 2.0 contract in this development tree, not a
+published release. The project is licensed under Apache-2.0.

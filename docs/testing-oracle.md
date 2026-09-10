@@ -80,3 +80,20 @@ intended violation was observed at the selected engine execution point.
 
 See the [DSL reference](dsl-reference.md) for declaration schemas and
 [determinism](determinism.md) for the atomic sequence.
+
+## Phase 2 Oracle Assertions
+
+`scenario_engine.oracle_assertions` evaluates pure structured assertions over
+Phase 2.5-normalized inspection evidence after a result exists. The exact public
+kinds are `equal`, `not_equal`, `present`, `absent`, `count`,
+`ordered_subsequence`, `occurrence_count`, `transition_occurrence`,
+`transition_order`, and `logical_time`. Evidence targets are RFC 6901 JSON
+Pointers. Results are `pass`, `fail`, or `unavailable`; absent or redacted
+evidence is never invented and produces unavailable where evaluation cannot be
+supported. Evaluation performs no execution, rerun, or replay and cannot call
+Python, plugins, filesystem, network, clocks, environment, or randomness.
+
+At most 1,000 assertions are accepted; paths have depth at most 64; sequence
+scans inspect at most 100,000 records; canonical assertion/evaluation data is
+bounded to 1 MiB. The [Phase 2 public contract](phase2-public-contract.md#hard-bounds)
+collects all product bounds.

@@ -71,5 +71,15 @@ declarative derivations are dependency-resolved rather than source-key ordered.
 Canonical JSON uses sorted mapping keys. Do not use mapping insertion order to
 encode business sequencing; use an ordered DSL list.
 
+Phase 2 composition resolves modules by explicit alias and hashes semantic
+content without physical paths. Matrix order is declaration-order Cartesian
+order with the last dimension changing fastest; retained cases keep their
+original pre-filter index. Batch members have independent execution contexts and
+results are emitted in plan order regardless of worker completion. Inspection,
+diff, and assertion evaluation are pure consumers of immutable normalized
+evidence. Worker scheduling, filesystem enumeration, host paths, locale defaults,
+environment variables, network responses, and process history are not semantic
+coordinates.
+
 See [reproducibility](reproducibility.md) for recorded context and
 [compatibility](compatibility.md) for the normative replay contract.
