@@ -4,8 +4,10 @@ import json
 from pathlib import Path
 import re
 import runpy
+import shutil
 import subprocess
 import sys
+import tarfile
 
 import yaml
 
@@ -13,6 +15,47 @@ import yaml
 ROOT = Path(__file__).parents[1]
 WORKFLOW = ROOT / ".github/workflows/scenario-engine.yml"
 VERSION = runpy.run_path(ROOT / "src/scenario_engine/_version.py")["VERSION"]
+
+_SNAPSHOT_EXCLUDES = {
+    ".coverage",
+    ".git",
+    ".hypothesis",
+    ".mypy_cache",
+    ".nox",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".tox",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "htmlcov",
+    "venv",
+}
+
+
+def _snapshot_ignore(_directory: str, names: list[str]) -> set[str]:
+    return {
+        name
+        for name in names
+        if name in _SNAPSHOT_EXCLUDES
+        or name.endswith((".egg-info", ".pyc", ".pyo"))
+    }
+
+
+def _materialize_fresh_source(destination: Path, archive: Path) -> None:
+    if (ROOT / ".git").exists():
+        subprocess.run(
+            ["git", "archive", "--format=tar", "HEAD", "-o", str(archive)],
+            cwd=ROOT,
+            check=True,
+        )
+        destination.mkdir()
+        with tarfile.open(archive) as snapshot:
+            snapshot.extractall(destination, filter="data")
+        return
+
+    shutil.copytree(ROOT, destination, ignore=_snapshot_ignore)
 
 
 def _workflow_text() -> str:
@@ -87,14 +130,8 @@ def test_repeated_public_cli_execution_is_byte_identical_and_diff_detects_change
 
 def test_fresh_tree_wheel_supports_workflow_public_commands(tmp_path: Path) -> None:
     archive = tmp_path / "source.tar"
-    subprocess.run(
-        ["git", "archive", "--format=tar", "HEAD", "-o", str(archive)],
-        cwd=ROOT,
-        check=True,
-    )
     fresh = tmp_path / "fresh"
-    fresh.mkdir()
-    subprocess.run(["tar", "-xf", str(archive), "-C", str(fresh)], check=True)
+    _materialize_fresh_source(fresh, archive)
     # Include the uncommitted Phase 2.10 workflow for the pre-commit simulation.
     workflow = fresh / WORKFLOW.relative_to(ROOT)
     workflow.parent.mkdir(parents=True, exist_ok=True)
