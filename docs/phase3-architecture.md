@@ -518,3 +518,31 @@ TOCTOU boundary. Child bytes remain opaque. The reader performs no writes,
 execution, replay, imports selected by data, discovery, network, subprocess,
 environment-derived semantics, clock access, or randomness. Export and every
 3.3+ capability remain deferred.
+
+## 22. Phase 3.3 implementation resolution
+
+The separately authorized 3.3 checkpoint adds three bounded APIs under
+`scenario_engine.evidence`. `canonical_evidence_records_bytes` accepts a finite
+explicit sequence of values under the existing DSE typed semantic normalization,
+preserves semantic sequence order, sorts mapping keys, and returns one compact
+UTF-8 JSON array without a newline. `write_evidence_jsonl` consumes records in
+explicit caller order, streams one compact canonical value plus LF per record, writes zero bytes for an
+empty stream, always includes the final LF for non-empty output, and returns the
+SHA-256 of exact written bytes. Both enforce 100,000 records and an explicit byte
+limit whose default is 256 MiB and hard ceiling is 4 GiB.
+
+`export_evidence_bundle` accepts one existing `EvidenceBundle`, an explicit
+absolute source root containing its declared paths, and an absent explicit
+absolute destination. The canonical directory layout is `bundle.json` plus the
+bundle's already validated relative POSIX entry paths. Child bytes are copied
+unchanged in bounded chunks; size and SHA-256 are verified. An adjacent staging
+directory is completed and validated through `read_evidence_bundle` before one
+same-filesystem directory rename publishes it. Existing destinations and
+symlinked/unsafe source or destination components fail closed; recoverable
+failure removes staging and leaves the final destination absent. Temporary name
+and chunk size are not identity inputs. As in 3.2, complete race freedom against
+a concurrently hostile filesystem is not claimed; callers supply stable local
+source and destination parents. Export performs no execution, discovery,
+network, subprocess, environment-derived semantics, semantic clock access, or
+semantic randomness. Adapters, receipts, migrations, fixture transformation,
+CLI work, and every 3.4+ feature remain deferred.

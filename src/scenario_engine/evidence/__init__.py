@@ -8,12 +8,24 @@ from .canonical import (
 from .errors import (
     EvidenceBoundError,
     EvidenceContractError,
+    EvidenceDestinationError,
+    EvidenceExportBoundError,
+    EvidenceExportError,
     EvidenceFilesystemError,
     EvidenceIndexError,
     EvidenceIntegrityError,
+    EvidencePublicationError,
     EvidenceSerializationError,
+    EvidenceSourceIntegrityError,
     EvidenceValidationBoundError,
     EvidenceValidationError,
+)
+from .export import (
+    BUNDLE_INDEX_FILENAME,
+    MAX_JSONL_RECORDS,
+    canonical_evidence_records_bytes,
+    export_evidence_bundle,
+    write_evidence_jsonl,
 )
 from .models import (
     DEFAULT_AGGREGATE_BUNDLE_BYTES,
@@ -37,6 +49,7 @@ from .read import MAX_BUNDLE_INDEX_DEPTH, read_evidence_bundle
 
 
 __all__ = (
+    "BUNDLE_INDEX_FILENAME",
     "DEFAULT_AGGREGATE_BUNDLE_BYTES",
     "EVIDENCE_BUNDLE_SCHEMA_VERSION",
     "EVIDENCE_ENTRY_SCHEMA_VERSION",
@@ -49,21 +62,30 @@ __all__ = (
     "MAX_BUNDLE_INDEX_DEPTH",
     "MAX_BUNDLE_PATH_DEPTH",
     "MAX_BUNDLE_RELATIONSHIPS",
+    "MAX_JSONL_RECORDS",
     "EvidenceBoundError",
     "EvidenceBundle",
     "EvidenceContractError",
+    "EvidenceDestinationError",
     "EvidenceEntry",
+    "EvidenceExportBoundError",
+    "EvidenceExportError",
     "EvidenceFilesystemError",
     "EvidenceIndexError",
     "EvidenceIntegrityError",
+    "EvidencePublicationError",
     "EvidenceProvenance",
     "EvidenceRelationship",
     "EvidenceSerializationError",
+    "EvidenceSourceIntegrityError",
     "EvidenceType",
     "EvidenceValidationBoundError",
     "EvidenceValidationError",
     "canonical_evidence_bytes",
+    "canonical_evidence_records_bytes",
     "canonical_evidence_text",
     "evidence_bundle_hash",
+    "export_evidence_bundle",
     "read_evidence_bundle",
+    "write_evidence_jsonl",
 )

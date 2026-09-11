@@ -49,3 +49,33 @@ class EvidenceValidationBoundError(EvidenceValidationError):
     """A physical reader/validator resource bound was exceeded."""
 
     code = "evidence.validation_bound_exceeded"
+
+
+class EvidenceExportError(ScenarioEngineError, ValueError):
+    """A bounded evidence serialization or export failed."""
+
+    code = "evidence.export_invalid"
+
+
+class EvidenceExportBoundError(EvidenceExportError):
+    """An evidence export exceeded a configured or architectural bound."""
+
+    code = "evidence.export_bound_exceeded"
+
+
+class EvidenceDestinationError(EvidenceExportError):
+    """An evidence export destination is existing or unsafe."""
+
+    code = "evidence.destination_invalid"
+
+
+class EvidenceSourceIntegrityError(EvidenceExportError):
+    """Source evidence bytes do not match their declared identity."""
+
+    code = "evidence.source_integrity_invalid"
+
+
+class EvidencePublicationError(EvidenceExportError):
+    """A complete staged bundle could not be atomically published."""
+
+    code = "evidence.publication_failed"
