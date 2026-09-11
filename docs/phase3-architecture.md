@@ -497,3 +497,24 @@ limits, semantic payload depth, filesystem materialization, symlinks and special
 files require actual input bytes or a filesystem root and are therefore deferred
 to the bounded 3.2 reader/validator (and later exporters). This resolution adds
 no reader, exporter, adapter, migration, CLI, execution, or retrieval behavior.
+
+## 21. Phase 3.2 implementation resolution
+
+The separately authorized 3.2 checkpoint adds one non-executing API,
+`read_evidence_bundle(index_path, *, bundle_root, max_aggregate_bytes=...)`, under
+`scenario_engine.evidence`. Both paths must be explicit absolute local paths and
+the index must be beneath the root. Validation order is bounded index read,
+strict UTF-8/duplicate-safe JSON and depth checking, exact 3.1 model
+reconstruction and canonical-byte checking, semantic-order filesystem checks,
+individual/declarative/aggregate physical-size checks, then streamed SHA-256.
+
+Filesystem traversal uses directory-relative descriptors, no-follow opens, and
+regular-file checks for the index, every intermediate component, and every
+artifact. Files are reopened for hashing and identity/size/mtime are checked
+across validation. These checks strongly constrain substitution but do not claim
+a portable, completely race-free guarantee against a concurrently malicious
+filesystem; callers must provide a locally trusted/stable root for that residual
+TOCTOU boundary. Child bytes remain opaque. The reader performs no writes,
+execution, replay, imports selected by data, discovery, network, subprocess,
+environment-derived semantics, clock access, or randomness. Export and every
+3.3+ capability remain deferred.

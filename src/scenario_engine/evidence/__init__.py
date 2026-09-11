@@ -5,7 +5,16 @@ from .canonical import (
     canonical_evidence_text,
     evidence_bundle_hash,
 )
-from .errors import EvidenceBoundError, EvidenceContractError, EvidenceSerializationError
+from .errors import (
+    EvidenceBoundError,
+    EvidenceContractError,
+    EvidenceFilesystemError,
+    EvidenceIndexError,
+    EvidenceIntegrityError,
+    EvidenceSerializationError,
+    EvidenceValidationBoundError,
+    EvidenceValidationError,
+)
 from .models import (
     DEFAULT_AGGREGATE_BUNDLE_BYTES,
     EVIDENCE_BUNDLE_SCHEMA_VERSION,
@@ -24,6 +33,7 @@ from .models import (
     EvidenceRelationship,
     EvidenceType,
 )
+from .read import MAX_BUNDLE_INDEX_DEPTH, read_evidence_bundle
 
 
 __all__ = (
@@ -36,17 +46,24 @@ __all__ = (
     "MAX_ARTIFACT_BYTES",
     "MAX_BUNDLE_ENTRIES",
     "MAX_BUNDLE_INDEX_BYTES",
+    "MAX_BUNDLE_INDEX_DEPTH",
     "MAX_BUNDLE_PATH_DEPTH",
     "MAX_BUNDLE_RELATIONSHIPS",
     "EvidenceBoundError",
     "EvidenceBundle",
     "EvidenceContractError",
     "EvidenceEntry",
+    "EvidenceFilesystemError",
+    "EvidenceIndexError",
+    "EvidenceIntegrityError",
     "EvidenceProvenance",
     "EvidenceRelationship",
     "EvidenceSerializationError",
     "EvidenceType",
+    "EvidenceValidationBoundError",
+    "EvidenceValidationError",
     "canonical_evidence_bytes",
     "canonical_evidence_text",
     "evidence_bundle_hash",
+    "read_evidence_bundle",
 )
