@@ -618,3 +618,22 @@ API reads files or environment, imports data-selected code, traverses bundles,
 loads plugins or Domain Packs, invokes adapters/assertions/scenarios, executes a
 migration, performs network/subprocess I/O, observes time, or uses randomness.
 Migration execution and fixture export remain deferred to 3.6.
+
+## 25. Phase 3.6 implementation resolution
+
+The separately authorized 3.6 checkpoint executes exactly the six frozen 3.5
+one-step wrapper routes through a private static transformation map. Execution
+requires the accepted plan and matching descriptor, verifies declared source
+SHA-256 while copying in bounded chunks, preserves source bytes unchanged as the
+single bundle child, records source-hash provenance, and publishes through the
+3.3 atomic bundle exporter. Unknown, lossy, malformed, unsupported, cyclic, or
+noncontiguous plans fail closed; execution performs no discovery or replay.
+
+The separate fixture-directory exporter accepts at most 100,000 explicit
+portable fixture IDs, writes canonical semantic JSON at
+`fixtures/<fixture-id>.json`, and publishes a canonical
+`evidence.fixture-index/1` sorted by fixture ID with exact byte hashes and sizes.
+It reuses existing artifact, aggregate, path, and atomic-publication ceilings;
+directory enumeration, clock, randomness, environment, and host paths do not
+affect identity. This resolution adds no CLI, provider, execution authority,
+version change, or Phase 3.7 work.

@@ -81,6 +81,24 @@ class EvidencePublicationError(EvidenceExportError):
     code = "evidence.publication_failed"
 
 
+class EvidenceMigrationError(ScenarioEngineError, ValueError):
+    """A migration plan cannot be executed by the closed lossless executor."""
+
+    code = "evidence.migration_invalid"
+
+
+class EvidenceMigrationContractError(EvidenceMigrationError):
+    """A plan, descriptor, or route violates the execution contract."""
+
+    code = "evidence.migration_contract_invalid"
+
+
+class EvidenceMigrationSourceIntegrityError(EvidenceMigrationError):
+    """Migration source bytes do not match their declared identity."""
+
+    code = "evidence.migration_source_integrity_invalid"
+
+
 class EvidenceAdapterError(ScenarioEngineError, ValueError):
     """An explicit evidence adapter operation or contract failed."""
 
