@@ -637,3 +637,31 @@ It reuses existing artifact, aggregate, path, and atomic-publication ceilings;
 directory enumeration, clock, randomness, environment, and host paths do not
 affect identity. This resolution adds no CLI, provider, execution authority,
 version change, or Phase 3.7 work.
+
+## 26. Phase 3.7 implementation resolution
+
+The separately authorized 3.7 checkpoint adds exactly three local top-level CLI
+commands after the frozen original nine: `export`, `verify`, and `migrate`.
+`export SOURCE DESTINATION` validates the canonical `bundle.json` beneath an
+explicit bundle root and delegates unchanged-byte atomic publication to the
+accepted evidence exporter. `verify BUNDLE` delegates bounded, non-mutating
+index, filesystem, size, hash, relationship, and identity validation to the
+accepted evidence reader. Neither operation executes child artifacts.
+
+`migrate SOURCE DESTINATION` requires explicit artifact kind, source schema,
+product version, lowercase source SHA-256, and target contract. It first uses the
+accepted planner and permits only a planned lossless route before delegating to
+the closed 3.6 executor. Optional `--dry-run` emits the accepted canonical
+`evidence.migration-plan/1` and creates no destination. Successful machine output
+uses existing canonical JSON conventions; human output is compact and stable.
+Existing exit integers are unchanged: evidence contract/integrity/migration
+failures map to validation, unsafe/bounded filesystem input maps to security or
+bound, and destination/publication failures map to I/O.
+
+Fixture-directory CLI export is deferred because 3.6 exposes typed in-memory
+declarations but no accepted serialized declaration format; no new input schema
+is invented. The package-root API, `scenario_engine.cli` exports, console script,
+dependencies, versions, all persisted schemas, and the original nine command
+contracts remain unchanged. These commands perform no adapters, provider
+discovery, network, subprocess, environment reads, semantic clock, randomness,
+dynamic loading, replay, or execution. Phase 3.8 remains unstarted.

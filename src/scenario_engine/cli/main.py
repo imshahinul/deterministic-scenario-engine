@@ -28,6 +28,16 @@ from scenario_engine.dsl import (
     DSLError, compile_document, parse_yaml, replay_scenario, run_scenario,
 )
 from scenario_engine.errors import ScenarioEngineError
+from scenario_engine.evidence import (
+    BUNDLE_INDEX_FILENAME, ArtifactDescriptor, EvidenceBoundError, EvidenceContractError,
+    EvidenceDestinationError, EvidenceExportBoundError, EvidenceFilesystemError,
+    EvidenceIndexError, EvidenceIntegrityError, EvidenceMigrationError,
+    EvidencePublicationError, EvidenceSourceIntegrityError,
+    EvidenceValidationBoundError, EvidenceValidationError, MigrationDisposition,
+    canonical_migration_plan_bytes, canonical_migration_result_bytes,
+    execute_lossless_migration, export_evidence_bundle, plan_migration,
+    read_evidence_bundle,
+)
 from scenario_engine.inspection import (
     InspectionBoundError, InspectionError, canonical_explanation_bytes,
     canonical_inspection_bytes, explain_result, inspect,
@@ -127,6 +137,23 @@ def _parser() -> argparse.ArgumentParser:
     batch.add_argument("source", help="local bounded batch-plan JSON path or - for stdin")
     batch.add_argument("--workers", type=int, default=1, help="bounded execution strategy")
     batch.add_argument("--max-in-flight", type=int, default=64, help="bounded scheduling window")
+
+    export = commands.add_parser("export", help="export a validated local evidence bundle")
+    export.add_argument("source", help="explicit local evidence bundle root")
+    export.add_argument("destination", help="absent local destination directory")
+
+    verify = commands.add_parser("verify", help="verify a local evidence bundle")
+    verify.add_argument("bundle", help="explicit local evidence bundle root")
+
+    migrate = commands.add_parser("migrate", help="execute a planned lossless migration")
+    migrate.add_argument("source", help="explicit local source artifact path")
+    migrate.add_argument("destination", help="absent local destination directory")
+    migrate.add_argument("--artifact-kind", required=True, help="explicit artifact kind")
+    migrate.add_argument("--schema-version", required=True, help="explicit source schema contract")
+    migrate.add_argument("--product-version", required=True, help="explicit source product version")
+    migrate.add_argument("--source-sha256", required=True, help="exact lowercase source SHA-256")
+    migrate.add_argument("--target-contract", default="evidence.bundle/1", help="explicit target contract")
+    migrate.add_argument("--dry-run", action="store_true", help="plan without creating a destination")
     return parser
 
 
@@ -424,6 +451,67 @@ def _batch_request(item: Any, base: Path | None) -> RunRequest:
     )
 
 
+def _bundle_at(root_value: str):
+    _reject_remote(root_value)
+    root = Path(root_value)
+    return read_evidence_bundle(root / BUNDLE_INDEX_FILENAME, bundle_root=root)
+
+
+def _bundle_summary(command: str, bundle: Any) -> dict[str, Any]:
+    return {
+        "bundle_id": bundle.bundle_id,
+        "command": command,
+        "entry_count": len(bundle.entries),
+        "relationship_count": len(bundle.relationships),
+        "schema": bundle.schema_version,
+        "verified": True,
+    }
+
+
+def _export(args: argparse.Namespace) -> tuple[bytes, bytes]:
+    bundle = _bundle_at(args.source)
+    exported = export_evidence_bundle(
+        bundle, source_root=Path(args.source), destination=Path(args.destination),
+    )
+    value = _bundle_summary("export", exported)
+    return _canonical(value), (
+        f"exported evidence bundle {exported.bundle_id} "
+        f"({len(exported.entries)} entries, {len(exported.relationships)} relationships)\n"
+    ).encode("utf-8")
+
+
+def _verify(args: argparse.Namespace) -> tuple[bytes, bytes]:
+    bundle = _bundle_at(args.bundle)
+    value = _bundle_summary("verify", bundle)
+    return _canonical(value), (
+        f"verified evidence bundle {bundle.bundle_id} "
+        f"({len(bundle.entries)} entries, {len(bundle.relationships)} relationships)\n"
+    ).encode("utf-8")
+
+
+def _migrate(args: argparse.Namespace) -> tuple[bytes, bytes]:
+    _reject_remote(args.source)
+    descriptor = ArtifactDescriptor(
+        args.artifact_kind, args.schema_version, args.product_version, args.source_sha256,
+    )
+    plan = plan_migration(descriptor, args.target_contract)
+    if plan.disposition is not MigrationDisposition.PLANNED:
+        raise _CLIError("no supported lossless migration route", CLIExitCode.VALIDATION)
+    transformations = ",".join(step.transformation_id for step in plan.steps)
+    if args.dry_run:
+        return canonical_migration_plan_bytes(plan), (
+            f"planned lossless migration {plan.plan_id} ({transformations})\n"
+        ).encode("utf-8")
+    result = execute_lossless_migration(
+        plan, source_descriptor=descriptor, source_path=Path(args.source),
+        destination=Path(args.destination),
+    )
+    return canonical_migration_result_bytes(result), (
+        f"migrated losslessly {result.plan_id} -> {result.target_sha256} "
+        f"({','.join(result.transformations)})\n"
+    ).encode("utf-8")
+
+
 def _canonical(value: Any) -> bytes:
     return json.dumps(
         normalize(value), ensure_ascii=False, allow_nan=False, sort_keys=True,
@@ -454,6 +542,14 @@ def _mapped(error: Exception) -> CLIExitCode:
         return CLIExitCode.REPLAY_COMPATIBILITY
     if isinstance(error, (CompositionBoundError, ArtifactBoundError, InspectionBoundError, DiffBoundError)):
         return CLIExitCode.SECURITY_OR_BOUND
+    if isinstance(error, (EvidenceBoundError, EvidenceExportBoundError, EvidenceValidationBoundError,
+                          EvidenceFilesystemError)):
+        return CLIExitCode.SECURITY_OR_BOUND
+    if isinstance(error, (EvidenceDestinationError, EvidencePublicationError)):
+        return CLIExitCode.IO
+    if isinstance(error, (EvidenceContractError, EvidenceIndexError, EvidenceIntegrityError, EvidenceSourceIntegrityError,
+                          EvidenceValidationError, EvidenceMigrationError)):
+        return CLIExitCode.VALIDATION
     if isinstance(error, (UnsupportedCompositionSourceError, CompositionPathError)):
         return CLIExitCode.SECURITY_OR_BOUND
     if isinstance(error, (DSLError, CompositionError, ArtifactReadError, SuiteSerializationError)):
@@ -474,7 +570,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         handler = {
             "validate": _validate, "run": _run, "replay": _replay, "hash": _hash,
             "inspect": _inspect, "explain": _explain, "diff": _diff,
-            "matrix": _matrix, "batch": _batch,
+            "matrix": _matrix, "batch": _batch, "export": _export,
+            "verify": _verify, "migrate": _migrate,
         }[args.command]
         outcome = handler(args)
         machine, human = outcome[0], outcome[1]
