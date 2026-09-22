@@ -546,3 +546,39 @@ source and destination parents. Export performs no execution, discovery,
 network, subprocess, environment-derived semantics, semantic clock access, or
 semantic randomness. Adapters, receipts, migrations, fixture transformation,
 CLI work, and every 3.4+ feature remain deferred.
+
+## 23. Phase 3.4 implementation resolution
+
+The separately authorized 3.4 checkpoint adds the structural `EvidenceAdapter`
+protocol under `scenario_engine.evidence`. A caller supplies one trusted,
+unsandboxed adapter instance directly. Its immutable
+`evidence.adapter-capability/1` declaration records a portable adapter ID,
+bounded adapter version, exact `evidence.adapter/1` contract, and exactly the
+provider-neutral `publish-bundle` operation. There is no registry, entry-point
+or module discovery, bundle/YAML selection, environment selection, credential
+handling, provider configuration API, retry, or concrete provider.
+
+`publish_evidence_bundles` passes existing validated `EvidenceBundle` objects to
+that instance without parsing, rewriting, or changing bundle identity. Input
+ordinals are assigned before bounded submission. A sliding window defaults to
+64 and has a hard maximum of 1,024; it does not eagerly exhaust the input.
+Optional standard-library worker concurrency cannot change returned input order.
+The adapter returns only a bounded `EvidenceAdapterPublication` observation.
+Core normalizes it to immutable `evidence.adapter-receipt/1` records retaining
+adapter identity/version, source bundle ID, operation, ordinal, status, and an
+optional external locator. Canonical capability and receipt bytes are compact,
+key-sorted UTF-8 JSON without timestamps, randomness, process/host state, or
+arbitrary provider mappings. Receipts are bounded by exact canonical bytes at
+1 MiB individually and 16 MiB in aggregate.
+
+Adapter exceptions are isolated as a stable `adapter.operation_failed` receipt;
+raw exception text and objects are never persisted. Malformed declarations,
+requests, or returns fail as typed contract errors, while failures of the core
+or iterable boundary use a typed orchestration error. Successful prior external
+side effects are not rolled back and no transaction is promised. Source bytes,
+IDs, ordinals, normalization, ordering, and bound enforcement are deterministic;
+adapter timing, availability, side effects, and returned provider locator are
+explicitly not. The generic layer performs no external I/O except invoking the
+explicit adapter method and never feeds a provider observation into scenario
+execution. Compatibility/migration, fixture export, CLI additions, providers,
+reference workflows, versions, and every 3.5+ capability remain deferred.

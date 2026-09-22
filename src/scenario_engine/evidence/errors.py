@@ -79,3 +79,27 @@ class EvidencePublicationError(EvidenceExportError):
     """A complete staged bundle could not be atomically published."""
 
     code = "evidence.publication_failed"
+
+
+class EvidenceAdapterError(ScenarioEngineError, ValueError):
+    """An explicit evidence adapter operation or contract failed."""
+
+    code = "evidence.adapter_invalid"
+
+
+class EvidenceAdapterContractError(EvidenceAdapterError, TypeError):
+    """An adapter declaration, request, or return violates the contract."""
+
+    code = "evidence.adapter_contract_invalid"
+
+
+class EvidenceAdapterBoundError(EvidenceAdapterError):
+    """Adapter orchestration or canonical receipts exceeded a bound."""
+
+    code = "evidence.adapter_bound_exceeded"
+
+
+class EvidenceAdapterOrchestrationError(EvidenceAdapterError, RuntimeError):
+    """The generic bounded adapter orchestrator itself failed."""
+
+    code = "evidence.adapter_orchestration_failed"
