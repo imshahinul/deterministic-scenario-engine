@@ -698,3 +698,23 @@ existing in-process JSON `verify` and `export` commands. Repeated fresh workflow
 runs and exports are byte-identical. Fixture export, matrix, batch, adapters,
 migration, discovery, network, credentials, environment inputs, and publication
 are deliberately unused. `REFERENCE_FIXTURE_EXPORT_USED=NO`.
+
+## 28. Phase 3.10 hardening resolution
+
+The separately authorized 3.10 checkpoint measured representative accepted
+baseline workloads before mutation, then added deterministic adversarial and
+structural regression guards. Broad timing ceilings detect catastrophic
+regression only; measured time remains test/evidence context and never enters
+canonical bytes, IDs, manifests, receipts, or CLI output.
+
+The frozen Phase 3 ceilings remain unchanged: 100,000 bundle entries and JSONL
+records, 16 MiB canonical index, 256 MiB individual artifact and default
+aggregate operation, 4 GiB hard aggregate operation, depth 64, adapter in-flight
+default 64/hard 1,024, receipt 1 MiB/aggregate 16 MiB, and 1,000 migration steps
+with no recursive chain. Tests prove bounded index and artifact reads, lazy JSONL
+and adapter consumption, bounded adapter futures, provider-error redaction,
+descriptor/no-follow filesystem validation, canonical permutation stability, and
+fail-closed malformed, deep, noncanonical, symlink, directory, size, aggregate,
+and hash input. Existing Phase 2 hardening remains authoritative. No ceiling is
+weakened and no API, schema, CLI command, migration route, evidence type,
+dependency, product capability, or workflow semantic is added.
