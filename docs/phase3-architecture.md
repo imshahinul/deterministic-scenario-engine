@@ -582,3 +582,39 @@ explicitly not. The generic layer performs no external I/O except invoking the
 explicit adapter method and never feeds a provider observation into scenario
 execution. Compatibility/migration, fixture export, CLI additions, providers,
 reference workflows, versions, and every 3.5+ capability remain deferred.
+
+## 24. Phase 3.5 implementation resolution
+
+The separately authorized 3.5 checkpoint adds pure metadata-driven compatibility
+reporting and migration planning under `scenario_engine.evidence`. The immutable
+`ArtifactDescriptor` contains only artifact kind, versioned schema, product
+version, optional lowercase source SHA-256, and a bounded sorted tuple of explicit
+requirement coordinates. It does not accept arbitrary metadata or paths and does
+not parse payload bytes.
+
+`evidence.compatibility-report/1` reports the current consumer contract and one
+ordered determination for every positive capability: `READABLE`, `INSPECTABLE`,
+`DIFFABLE`, `EXECUTABLE`, `REPLAYABLE`, and `MIGRATABLE`. `UNSUPPORTED` is the
+aggregate capability only when no positive capability applies. Each determination
+has a supported/unsupported disposition, a finite reason code, and sorted explicit
+requirements. Missing and mismatched execution coordinates remain unsupported;
+readability never implies execution, and container readability never implies
+child execution.
+
+`evidence.migration-plan/1` contains a source descriptor, target contract,
+disposition, finite reason, ordered declared-lossless steps, and SHA-256 plan
+identity. The only frozen routes are one-step wrappers of unchanged v1 result or
+manifest bytes and unchanged v2 suite, composition, matrix, or batch bytes into
+`evidence.bundle/1`. These plans require preserving source bytes and SHA-256 and
+do not claim replay support. Every other pair has no lossless path. Plans are
+acyclic, contiguous, non-recursive, and bounded to 1,000 steps. If finite policy
+ever has several routes, selection is fewest steps then lexical transformation-ID
+sequence.
+
+Report and plan bytes are compact sorted-key UTF-8 JSON without a newline; hashes
+are SHA-256 of those exact bytes. The finite internal matrix fails closed for
+unknown schemas and product versions and cannot be expanded by discovery. Neither
+API reads files or environment, imports data-selected code, traverses bundles,
+loads plugins or Domain Packs, invokes adapters/assertions/scenarios, executes a
+migration, performs network/subprocess I/O, observes time, or uses randomness.
+Migration execution and fixture export remain deferred to 3.6.
