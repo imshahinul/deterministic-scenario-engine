@@ -665,3 +665,36 @@ dependencies, versions, all persisted schemas, and the original nine command
 contracts remain unchanged. These commands perform no adapters, provider
 discovery, network, subprocess, environment reads, semantic clock, randomness,
 dynamic loading, replay, or execution. Phase 3.8 remains unstarted.
+
+## 27. Phase 3.8 implementation resolution
+
+The separately authorized 3.8 checkpoint adds one deep ecommerce reference
+workflow under `scenario_engine.reference_packs`. The fresh immutable
+`ecommerce.reference_evidence@1` Domain Pack contains one normal DSL 1 scenario,
+two explicit input cases, five accepted Oracle Assertion declarations, and exact
+version-1 requirements for the four existing ecommerce generators. It does not
+execute, instantiate plugins, select a registry, contain executable assets, or
+alter the existing generator names, versions, algorithms, outputs, or
+`ecommerce_registry()` semantics.
+
+`export_ecommerce_evidence(destination)` is the bounded demonstrator, not a
+generic Domain Pack execution API. It explicitly constructs and validates a
+fresh ecommerce registry, executes the baseline and one input-driven variant,
+replays the baseline through the accepted API with another fresh registry,
+inspects recorded baseline evidence, evaluates existing Oracle Assertion kinds,
+and computes the existing bounded structured semantic diff. It then uses the
+accepted atomic exporter to publish six honestly typed artifacts: baseline
+result and manifest, baseline inspection and evaluation, variant result, and
+semantic diff. Existing evidence relationships describe derivation, evaluation,
+and comparison; no schema, evidence type, diff operator, assertion kind, runtime,
+or CLI command is added.
+
+The v1 runtime has no legitimate Domain Pack execution coordinate, so the
+workflow does not fabricate `manifest.domain_pack_versions`. Domain Pack
+coordinate and content hash remain explicit caller-visible reference identity;
+the scenario canonical hash and accepted artifact hashes provide entry
+provenance. The local example accepts two explicit destinations and invokes the
+existing in-process JSON `verify` and `export` commands. Repeated fresh workflow
+runs and exports are byte-identical. Fixture export, matrix, batch, adapters,
+migration, discovery, network, credentials, environment inputs, and publication
+are deliberately unused. `REFERENCE_FIXTURE_EXPORT_USED=NO`.
