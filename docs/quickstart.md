@@ -114,3 +114,20 @@ scenario --json matrix examples/cart.yaml --seed quickstart --dimensions '[{"nam
 The diff exits 0 because the artifacts are equal. A valid unequal diff exits 1.
 For replay, batch-plan syntax, all flags, stdout/stderr rules and hard bounds,
 use the [Phase 2 public contract](phase2-public-contract.md#cli-contract).
+
+## 5. Phase 3 local evidence interchange
+
+The source tree also implements the unreleased Phase 3 commands. They are local,
+bounded, and non-executing when reading a bundle:
+
+```console
+scenario verify /absolute/path/to/evidence-bundle
+scenario export /absolute/path/to/evidence-bundle /absolute/path/to/absent-copy
+scenario migrate /absolute/path/to/result.json /absolute/path/to/absent-migration --artifact-kind result --schema-version scenario.result/1 --product-version 1.0.0 --source-sha256 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef --dry-run
+```
+
+The migration hash is an example-shaped placeholder: supply the actual lowercase
+SHA-256 of the source. `--dry-run` emits the deterministic metadata plan and does
+not create the destination. For a complete local demonstrator using explicit
+ecommerce plugins, execution, replay, inspection, assertions, diff, and bundle
+export, use the [Phase 3 public contract](phase3-public-contract.md#ecommerce-reference-workflow).

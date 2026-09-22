@@ -4,10 +4,11 @@
 
 Deterministic Scenario Engine (DSE) creates reproducible, state-consistent
 business histories and deterministic scenario suites with ground truth for
-testing. The Phase 2 contract is frozen in this source tree as an unpublished
-2.0.0 release candidate; no PyPI or GitHub release has occurred yet. Its
-distribution version is 2.0.0 while its deterministic compatibility version
-remains `ENGINE_VERSION == "1.0.0"` and its DSL version remains integer 1.
+testing. The published distribution is `deterministic-scenario-engine` 2.0.0.
+Phase 3 evidence-interchange capabilities are implemented on `main` but remain
+unreleased; their eventual distribution target is 2.1.0. The current source
+distribution remains 2.0.0, its deterministic compatibility version remains
+`ENGINE_VERSION == "1.0.0"`, and its DSL version remains integer 1.
 
 ## Why it exists
 
@@ -35,14 +36,18 @@ make expected behavior explicit.
 - ordered Cartesian matrices with stable case IDs and original indexes
 - immutable ordered batch plans and worker-independent results
 - structured, redacted inspect/explain evidence and typed RFC 6901 semantic diff
-- nine-command `scenario` CLI for local and CI workflows
+- twelve-command `scenario` CLI for local and CI workflows, including bounded
+  local evidence export, verification, and lossless migration
 - explicit immutable Domain Pack registries and pure Oracle Assertions
+- canonical evidence bundles, ordered JSON/JSONL export, compatibility reports,
+  explicit adapters, closed lossless migrations, and fixture-directory export
 
 Core execution does not require a database, network service, plugin, or property
 testing framework. See [security assumptions and non-goals](docs/security-and-non-goals.md).
-Phase 2 adds no hidden discovery, network, randomness, wall-clock, or ambient
-environment semantics. Its public imports, CLI contract, bounds, compatibility
-posture, and adoption guidance are frozen in the [Phase 2 public contract](docs/phase2-public-contract.md).
+Neither Phase 2 nor Phase 3 adds hidden discovery, network, randomness,
+wall-clock, or ambient environment semantics. The historical Phase 2 contract
+is frozen in the [Phase 2 public contract](docs/phase2-public-contract.md); the
+additive evidence surface is frozen in the [Phase 3 public contract](docs/phase3-public-contract.md).
 
 ## Installation
 
@@ -62,7 +67,7 @@ Install only the named optional integrations you need:
 /tmp/scenario-engine-docs-venv/bin/python -m pip install '.[schemathesis]'
 ```
 
-The release-candidate distribution is `deterministic-scenario-engine` 2.0.0. Install the package
+The published distribution is `deterministic-scenario-engine` 2.0.0. Install the package
 with `pip install deterministic-scenario-engine`, or select an optional integration
 with a command such as `pip install 'deterministic-scenario-engine[pytest]'`.
 
@@ -122,12 +127,13 @@ Unsupported cross-version replay fails explicitly. See the [determinism model](d
 - [Security assumptions and non-goals](docs/security-and-non-goals.md)
 - [Compatibility contract](docs/compatibility.md)
 - [Phase 2 public contract, CLI, and hard bounds](docs/phase2-public-contract.md)
+- [Phase 3 public contract and evidence interchange](docs/phase3-public-contract.md)
 
 ## Status
 
 Distribution release identity and deterministic engine compatibility are
-separate contracts: this unpublished candidate has distribution version 2.0.0,
-but generated core manifests retain `ENGINE_VERSION` 1.0.0 and DSL 1. Phase 2
-suite, composition, matrix, inspection, diff, Domain Pack, and Oracle Assertion
-contracts keep their own explicit schema versions. No 2.0.0 tag or publication
-has occurred. The project is licensed under Apache-2.0.
+separate contracts. Version 2.0.0 has been published to PyPI and as a GitHub
+Release. This source tree still reports distribution version 2.0.0; generated
+core manifests retain `ENGINE_VERSION` 1.0.0 and DSL 1. Phase 3 implementation
+on `main` is not published, no Phase 3 release candidate exists, and the eventual
+target is 2.1.0. The project is licensed under Apache-2.0.

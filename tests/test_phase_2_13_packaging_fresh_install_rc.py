@@ -113,6 +113,13 @@ def test_entry_points_and_release_candidate_wording_are_preserved() -> None:
     }
     docs = "\n".join((ROOT / path).read_text(encoding="utf-8") for path in (
         "README.md", "docs/phase2-public-contract.md",
-    ))
-    assert "unpublished 2.0.0 release candidate" in docs
-    assert "no PyPI or GitHub release has occurred yet" in docs
+    )).lower()
+    # HISTORICAL_CHECKPOINT_FACT: 2.0.0 was an unpublished release candidate
+    # when this packaging checkpoint was created.
+    # CURRENT_DOCUMENTATION_CONTRACT: current public docs report publication
+    # truthfully while keeping Phase 3 / 2.1.0 explicitly unreleased.
+    assert "2.0.0 has been published" in docs
+    assert "unpublished 2.0.0 release candidate" not in docs
+    assert "no pypi or github release has occurred yet" not in docs
+    assert "2.1.0" in docs
+    assert "not published" in docs

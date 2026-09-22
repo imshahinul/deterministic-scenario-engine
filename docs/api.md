@@ -1,15 +1,15 @@
 # Public Python API
 
 This is the canonical top-level Phase 1.0 contract, preserved unchanged by the
-Phase 2 freeze. Importable implementation symbols not listed here are not
-implicitly promoted to top-level public API. Specialized Phase 2 APIs are
-public through the explicit subpackages documented below, not package-root
-convenience exports.
+Phase 2 and Phase 3 freezes. Importable implementation symbols not listed here
+are not implicitly promoted to top-level public API. Specialized APIs are public
+through the explicit subpackages documented below, not package-root convenience
+exports.
 
 ## Constants and value objects
 
 - `ENGINE_VERSION` — engine compatibility version recorded in manifests; for
-  the 1.0 release candidate it intentionally equals distribution version 1.0.0.
+  current manifests it remains 1.0.0 independently of distribution version.
 - `MISSING` — singleton semantic missing value, distinct from null.
 - `LogicalID(value: str)` — deterministic logical identifier value; users
   normally receive it from `$id` generation.
@@ -185,3 +185,39 @@ paths are stable while helpers outside `__all__` are intentionally internal.
 
 The schema/version constants and all exact export manifests are executable
 contract tests. See the [complete Phase 2 contract](phase2-public-contract.md).
+
+## Phase 3 evidence APIs
+
+Phase 3 adds no package-root names. Its stable APIs are the names in `__all__`
+of `scenario_engine.evidence` and `scenario_engine.reference_packs`; helpers in
+their implementation modules are intentionally internal. Typical imports are:
+
+```python
+from scenario_engine.evidence import (
+    ArtifactDescriptor,
+    EvidenceBundle,
+    EvidenceEntry,
+    EvidenceProvenance,
+    EvidenceRelationship,
+    EvidenceType,
+    compatibility_report,
+    export_evidence_bundle,
+    plan_migration,
+    read_evidence_bundle,
+)
+from scenario_engine.reference_packs import (
+    EcommerceEvidenceWorkflow,
+    ecommerce_domain_pack,
+    export_ecommerce_evidence,
+)
+```
+
+The evidence subpackage exposes immutable bundle/entry/relationship/provenance
+models and canonicalization; bounded local reading and atomic export; canonical
+JSON/JSONL records; explicit adapter capability/publication/receipt contracts;
+finite compatibility reports and metadata-only migration plans; six closed,
+lossless executable wrapper routes; and deterministic fixture-directory export.
+`scenario_engine.reference_packs` exposes the ecommerce demonstrator and its
+existing registry factory, not a generic workflow framework. The exact public
+names, errors, schemas, limits, and compatibility posture are normative in the
+[Phase 3 public contract](phase3-public-contract.md).

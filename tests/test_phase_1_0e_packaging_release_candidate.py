@@ -125,16 +125,24 @@ class Phase10EPackagingReleaseCandidateTests(unittest.TestCase):
         quickstart = (ROOT / "docs" / "quickstart.md").read_text(encoding="utf-8")
         combined = f"{readme}\n{quickstart}".lower()
         self.assertIn("pip install deterministic-scenario-engine", combined)
-        # The historical 1.0 distribution is published; the 2.0 candidate is not.
+        # HISTORICAL_CHECKPOINT_FACT: this test predates publication of 2.0.0.
+        # CURRENT_DOCUMENTATION_CONTRACT: stable release facts may be stated, but
+        # stale future-publication claims and transient local-RC guidance may not.
         for stale_claim in (
             "future publication",
             "not currently available from pypi",
             "has not been published",
+            "unpublished 2.0.0",
+            "no pypi or github release has occurred yet",
         ):
             with self.subTest(stale_claim=stale_claim):
                 self.assertNotIn(stale_claim, combined)
         self.assertNotIn("github.com/", combined)
-        self.assertNotIn("published to pypi", combined)
+        self.assertNotIn("/users/", combined)
+        self.assertNotIn("phase3_2_validation_venv", combined)
+        self.assertIn("2.0.0 has been published", combined)
+        self.assertIn("2.1.0", combined)
+        self.assertIn("not published", combined)
 
     def test_top_level_api_is_unchanged_by_version_authority_module(self):
         self.assertNotIn("VERSION", scenario_engine.__all__)

@@ -78,6 +78,22 @@ requires explicit local root/module bytes matching recorded identities; matrix
 cases retain original Cartesian indexes and stable IDs; each batch member is
 independently replayable only under its recorded compatible contract.
 
+## Phase 3 evidence reproducibility
+
+An evidence entry records an artifact's exact byte length and SHA-256; provenance
+records the source SHA-256 and producing contract. A bundle ID hashes the
+canonical bundle index, while deterministic bundle export validates and copies
+the declared bytes without making a destination path part of identity. Reading,
+inspection, and diff capability do not imply execution or replay capability.
+Compatibility reports and migration plans state those capabilities separately
+and fail closed for unknown schemas or product versions.
+
+An approved migration verifies the declared source SHA-256, preserves exact
+source bytes inside a fresh bundle, leaves the source untouched, and records the
+closed transformation ID plus deterministic source/target identity. Repeating
+the same migration inputs at another absent destination produces the same
+identity. See the [Phase 3 public contract](phase3-public-contract.md).
+
 ## Frozen compatibility examples
 
 With the frozen test execution coordinates, canonical result SHA-256 values are:

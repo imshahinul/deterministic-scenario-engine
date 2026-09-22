@@ -81,5 +81,17 @@ evidence. Worker scheduling, filesystem enumeration, host paths, locale defaults
 environment variables, network responses, and process history are not semantic
 coordinates.
 
+Phase 3 evidence identity is the SHA-256 of canonical bundle index bytes. Entries
+bind explicit artifact paths, sizes, schemas, and content SHA-256 values;
+canonical export preserves those bytes and publishes an absent destination
+atomically. JSONL records follow caller order. Compatibility reports and
+migration plans use finite tables and deterministic canonical bytes; migration
+results bind source/target hashes and an ordered transformation tuple. Fixture
+IDs are explicit and stable, adapter receipts retain submission ordinal, and the
+ecommerce reference bundle identity is independent of destination path and
+worker scheduling. None of these downstream identities changes Phase 2 result
+or manifest semantics.
+
 See [reproducibility](reproducibility.md) for recorded context and
-[compatibility](compatibility.md) for the normative replay contract.
+[compatibility](compatibility.md) for the normative replay contract, and the
+[Phase 3 public contract](phase3-public-contract.md) for evidence identity.

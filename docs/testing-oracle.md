@@ -97,3 +97,9 @@ At most 1,000 assertions are accepted; paths have depth at most 64; sequence
 scans inspect at most 100,000 records; canonical assertion/evaluation data is
 bounded to 1 MiB. The [Phase 2 public contract](phase2-public-contract.md#hard-bounds)
 collects all product bounds.
+
+Phase 3 may package the canonical evaluation bytes as an evidence entry and link
+it to the inspection document it evaluated. Bundle reading does not evaluate or
+execute assertions. The ten kinds and all Phase 2 assertion semantics above are
+unchanged; see the [Phase 3 public contract](phase3-public-contract.md#ecommerce-reference-workflow)
+for the reference workflow's use of the existing evaluator.

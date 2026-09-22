@@ -1,13 +1,16 @@
 # Phase 2 Public Contract Freeze
 
-This document defines the upcoming Phase 2 / 2.0 public contract implemented in
-this source tree. It is an unpublished 2.0.0 release candidate; no PyPI or
-GitHub release has occurred yet. Distribution metadata is 2.0.0, while the
+This document defines the historical Phase 2 / 2.0 public contract. Version
+2.0.0 has since been published to PyPI and as a GitHub Release. Distribution
+metadata remains 2.0.0 in the current source tree, while the
 deterministic core compatibility token recorded in manifests remains
 `ENGINE_VERSION == "1.0.0"`. DSL version remains integer 1. Distribution release
 identity and engine compatibility are distinct concepts. Composition, matrix,
 suite, inspection, diff, Domain Pack, and Oracle Assertion contracts retain
 their independent schema versions and do not reinterpret valid v1 documents.
+The additive, currently unreleased Phase 3 evidence contract is documented
+separately in the [Phase 3 public contract](phase3-public-contract.md); its
+eventual distribution target is 2.1.0.
 
 ## Supported product surface
 

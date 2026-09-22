@@ -38,6 +38,27 @@ trusted, unsandboxed caller inputs; there is no automatic discovery or global
 registry. No ambient current directory, home, environment search path, or locale
 default becomes deterministic meaning.
 
+## Phase 3 evidence trust boundary
+
+Evidence bundles are untrusted input. Core evidence construction, reading,
+validation, compatibility reporting, and migration planning are local, bounded,
+non-executing operations with no network, provider discovery, environment-driven
+semantics, randomness, or wall-clock semantics. Reading a bundle never executes
+child artifacts or Oracle Assertions. Unknown and future schemas fail closed.
+
+Bundle paths are safe relative POSIX child paths. Traversal, absolute/URI paths,
+backslashes, unsafe links, symlinks, and special files are rejected; reads and
+aggregate work are bounded. Export, fixture creation, and migration require an
+explicit absent destination and use atomic publication without overwrite.
+Migrations select only a closed internal lossless transformation map, verify the
+source hash, never dynamically import a route, and never accept an arbitrary
+callable from data.
+
+Python plugins, Python-packaged Domain Packs, and caller-supplied adapter objects
+are explicit trusted participants and are **not sandboxed**. Adapters are never
+automatically discovered. Adapter side effects belong to that trusted object,
+not core evidence processing.
+
 ## Explicit non-goals
 
 Scenario Engine does not provide:
@@ -47,7 +68,7 @@ Scenario Engine does not provide:
 - arbitrary network execution or an API client;
 - hidden network calls, network imports, remote composition, or network retrieval;
 - automatic plugin or Domain Pack discovery, entry-point loading, filesystem
-  scanning, or global plugin/Domain Pack registries;
+  scanning, adapter/provider discovery, or global plugin/Domain Pack registries;
 - database-backed `ScenarioState`, ORM state, schema migration, or reflection-
   driven model discovery;
 - ORM-owned state or a raw SQL DSL;
@@ -55,4 +76,7 @@ Scenario Engine does not provide:
 - hidden randomness, wall-clock semantic dependence, or implicit environmental state;
 - automatic Schemathesis HTTP execution;
 - indefinite replay across incompatible major contracts;
+- recursive or lossy migration;
+- remote artifact retrieval in core evidence processing;
+- distributed scheduling, workers, services, or orchestration;
 - a general-purpose sandbox, workflow engine, or database migration framework.

@@ -718,3 +718,14 @@ fail-closed malformed, deep, noncanonical, symlink, directory, size, aggregate,
 and hash input. Existing Phase 2 hardening remains authoritative. No ceiling is
 weakened and no API, schema, CLI command, migration route, evidence type,
 dependency, product capability, or workflow semantic is added.
+
+## 29. Phase 3.11 public-contract resolution
+
+Implementation checkpoints 3.1 through 3.8 and 3.10 are complete. Checkpoint
+3.9 remains skipped because the 3.8 reference evidence established that no gap
+required it. Phase 3.11 freezes the additive public API, errors, schemas, CLI,
+bounds, compatibility, migration, trust model, reference identities, and public
+documentation without adding runtime semantics. The source distribution remains
+2.0.0; the unreleased Phase 3 target remains 2.1.0, with `ENGINE_VERSION` 1.0.0
+and DSL 1 unchanged. The next authorized step is 3.12 packaging/RC; it is not
+started by this resolution.
