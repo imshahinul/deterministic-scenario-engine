@@ -26,11 +26,12 @@ ENV = EvaluationEnvironment({}, {}, {})
 
 
 def document(initial: str = "{}", steps: str | None = None, extra: str = "") -> str:
+    rendered_steps = steps or "  - {id: done, transition: null}\n"
     return (
         "dsl_version: 1\nscenario: contract\n"
         "clock: {start: '2026-01-01T00:00:00Z'}\n"
         f"initial_state: {initial}\n"
-        f"steps:\n{steps or '  - {id: done, transition: null}\n'}"
+        f"steps:\n{rendered_steps}"
         f"{extra}"
     )
 
