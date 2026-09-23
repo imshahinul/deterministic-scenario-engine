@@ -4,6 +4,7 @@ import ast
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import importlib.util
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -83,7 +84,7 @@ class Phase06SqlAlchemyMaterializerTests(unittest.TestCase):
     def test_sqlalchemy_extra_is_optional_and_core_dependency_contract_unchanged(self):
         doc = tomllib.loads((ROOT / "pyproject.toml").read_text())
         self.assertEqual(doc["project"]["dependencies"], ["PyYAML==6.0.3"])
-        self.assertEqual(doc["project"]["optional-dependencies"]["pytest"], ["pytest>=9.1,<10"])
+        self.assertEqual(doc["project"]["optional-dependencies"]["pytest"], ["pytest>=9.1,<10", "build>=1,<2"])
         self.assertEqual(doc["project"]["optional-dependencies"]["sqlalchemy"], ["SQLAlchemy>=2.0,<3"])
 
     def test_core_import_does_not_require_or_eagerly_import_sqlalchemy(self):
@@ -194,13 +195,14 @@ class Phase06SqlAlchemyMaterializerTests(unittest.TestCase):
                 from pathlib import Path
                 from sqlalchemy import *
                 from scenario_engine.adapters.sqlalchemy import *
-                pytest_plugins=["scenario_engine.pytest_plugin"]
                 def test_real(scenario_engine):
                     text=Path({str(EXAMPLE)!r}).read_text(); result=scenario_engine.run_text(text,root_seed="p")
                     engine=create_engine("sqlite:///:memory:"); metadata=MetaData(); customers=Table("customers",metadata,Column("id",String,primary_key=True),Column("name",String)); orders=Table("orders",metadata,Column("id",String,primary_key=True),Column("customer_id",String),Column("amount",Integer)); metadata.create_all(engine)
                     report=materialize_result(engine,result,{{"customers":customers,"orders":orders}}); replay=scenario_engine.replay_text(text,result.manifest); assert report.rows_inserted==2; assert command_fingerprint(extract_row_commands(result))==command_fingerprint(extract_row_commands(replay))
             '''))
-            completed = subprocess.run([sys.executable, "-m", "pytest", "-q", str(path)], cwd=ROOT, capture_output=True, text=True)
+            command = [sys.executable, "-m", "pytest", "-q"]
+            if os.environ.get("PYTEST_DISABLE_PLUGIN_AUTOLOAD"): command.extend(("-p", "scenario_engine"))
+            completed = subprocess.run([*command, str(path)], cwd=ROOT, capture_output=True, text=True)
             self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
 
     def test_phase0_6_example_and_all_prior_examples_remain_compatible(self):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 import subprocess
@@ -189,8 +190,10 @@ class PluginEcommerceTests(unittest.TestCase):
 
     def test_real_pytest_harness_accepts_explicit_plugin_registry(self):
         with tempfile.TemporaryDirectory() as directory:
-            path=Path(directory)/"test_plugin.py"; path.write_text('pytest_plugins=["scenario_engine.pytest_plugin"]\nfrom pathlib import Path\nfrom scenario_engine.reference_packs.ecommerce import ecommerce_registry\ndef test_it(scenario_engine):\n t=Path("examples/phase0_7_ecommerce_plugin.yaml").read_text(); i={"email_domain":"example.test"}; r=scenario_engine.run_text(t,root_seed="s",inputs=i,plugins=ecommerce_registry()); assert r.to_json_bytes()==scenario_engine.replay_text(t,r.manifest,inputs=i,plugins=ecommerce_registry()).to_json_bytes()\n')
-            completed=subprocess.run([sys.executable,"-m","pytest","-q",str(path)],capture_output=True,text=True)
+            path=Path(directory)/"test_plugin.py"; path.write_text('from pathlib import Path\nfrom scenario_engine.reference_packs.ecommerce import ecommerce_registry\ndef test_it(scenario_engine):\n t=Path("examples/phase0_7_ecommerce_plugin.yaml").read_text(); i={"email_domain":"example.test"}; r=scenario_engine.run_text(t,root_seed="s",inputs=i,plugins=ecommerce_registry()); assert r.to_json_bytes()==scenario_engine.replay_text(t,r.manifest,inputs=i,plugins=ecommerce_registry()).to_json_bytes()\n')
+            command=[sys.executable,"-m","pytest","-q"]
+            if os.environ.get("PYTEST_DISABLE_PLUGIN_AUTOLOAD"): command.extend(("-p","scenario_engine"))
+            completed=subprocess.run([*command,str(path)],capture_output=True,text=True)
             self.assertEqual(0,completed.returncode,completed.stdout+completed.stderr)
 
     def test_phase0_7_example_and_all_prior_examples_remain_compatible(self):

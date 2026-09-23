@@ -55,7 +55,7 @@ class Phase08HypothesisSchemathesisTests(unittest.TestCase):
         project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
         self.assertEqual(project["dependencies"], ["PyYAML==6.0.3"])
         extras = project["optional-dependencies"]
-        self.assertEqual(extras["pytest"], ["pytest>=9.1,<10"]); self.assertEqual(extras["sqlalchemy"], ["SQLAlchemy>=2.0,<3"])
+        self.assertEqual(extras["pytest"], ["pytest>=9.1,<10", "build>=1,<2"]); self.assertEqual(extras["sqlalchemy"], ["SQLAlchemy>=2.0,<3"])
         self.assertEqual(extras["hypothesis"], ["hypothesis>=6,<7"]); self.assertEqual(set(extras["schemathesis"]), {"hypothesis>=6,<7", "schemathesis>=4,<5"})
 
     def test_core_and_integrations_package_import_without_hypothesis_or_schemathesis(self):
@@ -144,7 +144,7 @@ class Phase08HypothesisSchemathesisTests(unittest.TestCase):
         self.assertEqual(before, (outside.manifest, outside.normalized(), outside.to_json_bytes()))
 
     def test_real_pytest_runs_hypothesis_and_local_schemathesis_composition(self):
-        with tempfile.TemporaryDirectory(dir=Path.home() / "Developer/scenario-engine-audit") as directory:
+        with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "test_phase08_real.py"
             path.write_text("""from pathlib import Path\nimport yaml,schemathesis\nfrom hypothesis import given,settings,strategies as st\nfrom scenario_engine.integrations.hypothesis import scenario_cases\nfrom scenario_engine.integrations.schemathesis import SchemathesisCaseBindings,operation_cases\nfrom scenario_engine.reference_packs.ecommerce import ecommerce_registry\nfrom scenario_engine.dsl.runtime import replay_scenario\nROOT=Path(r'""" + str(ROOT) + """')\ny=(ROOT/'examples/phase0_8_api_scenario.yaml').read_text(); spec=yaml.safe_load((ROOT/'examples/phase0_8_openapi.yaml').read_text()); op=schemathesis.openapi.from_dict(spec)['/orders']['POST']\nss=scenario_cases(y,root_seed='real',run_indexes=st.integers(0,2),inputs=st.fixed_dictionaries({'customer_id':st.just('c'),'email_domain':st.just('example.test'),'quantity':st.integers(1,5)}),plugins=ecommerce_registry())\nb=SchemathesisCaseBindings(body={'quantity':'state.quantity','order_number':'state.order_number'})\n@given(operation_cases(op,ss,b))\n@settings(max_examples=5,database=None,deadline=None)\ndef test_real(x):\n assert x.case.body['quantity']==x.scenario.inputs['quantity']; assert x.scenario.result.to_json_bytes()==replay_scenario(x.scenario.yaml_text,x.scenario.result.manifest,inputs=dict(x.scenario.inputs),plugins=ecommerce_registry()).to_json_bytes()\n""")
             completed = subprocess.run([sys.executable, "-m", "pytest", "-q", str(path)], cwd=ROOT, capture_output=True, text=True)

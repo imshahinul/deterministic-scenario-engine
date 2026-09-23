@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -168,8 +169,10 @@ class Phase04ControlFlowTests(unittest.TestCase):
 
     def test_pytest_harness_runs_branch_subflow_repeat_scenario(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "test_real.py"; path.write_text('''from pathlib import Path\npytest_plugins=["scenario_engine.pytest_plugin"]\ndef test_flow(scenario_engine):\n t=Path("examples/phase0_4_control_flow.yaml").read_text(); i={"premium":True,"retry_count":2,"customer_id":"c"}; r=scenario_engine.run_text(t,root_seed="s",inputs=i); assert r.to_json()==scenario_engine.replay_text(t,r.manifest,inputs=i).to_json()\n''')
-            completed = subprocess.run([sys.executable, "-m", "pytest", "-q", str(path)], capture_output=True, text=True)
+            path = Path(directory) / "test_real.py"; path.write_text('''from pathlib import Path\ndef test_flow(scenario_engine):\n t=Path("examples/phase0_4_control_flow.yaml").read_text(); i={"premium":True,"retry_count":2,"customer_id":"c"}; r=scenario_engine.run_text(t,root_seed="s",inputs=i); assert r.to_json()==scenario_engine.replay_text(t,r.manifest,inputs=i).to_json()\n''')
+            command = [sys.executable, "-m", "pytest", "-q"]
+            if os.environ.get("PYTEST_DISABLE_PLUGIN_AUTOLOAD"): command.extend(("-p", "scenario_engine"))
+            completed = subprocess.run([*command, str(path)], capture_output=True, text=True)
             self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
 
     def test_phase0_4_example_and_all_prior_examples_remain_compatible(self):

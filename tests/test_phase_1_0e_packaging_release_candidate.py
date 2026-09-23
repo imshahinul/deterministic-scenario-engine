@@ -84,7 +84,7 @@ class Phase10EPackagingReleaseCandidateTests(unittest.TestCase):
         self.assertEqual(self.project["requires-python"], ">=3.11")
         self.assertEqual(self.project["dependencies"], ["PyYAML==6.0.3"])
         self.assertEqual(self.project["optional-dependencies"], {
-            "pytest": ["pytest>=9.1,<10"],
+            "pytest": ["pytest>=9.1,<10", "build>=1,<2"],
             "sqlalchemy": ["SQLAlchemy>=2.0,<3"],
             "hypothesis": ["hypothesis>=6,<7"],
             "schemathesis": ["hypothesis>=6,<7", "schemathesis>=4,<5"],

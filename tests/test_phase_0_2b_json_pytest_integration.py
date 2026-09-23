@@ -17,9 +17,6 @@ from scenario_engine.result import ScenarioResult
 
 ROOT = Path(__file__).parents[1]
 SRC = ROOT / "src"
-AUDIT_PYTHON = Path(
-    "/Users/smshahinulislam/Developer/scenario-engine-audit/runtime-venv/bin/python"
-)
 SCENARIO = """
 dsl_version: 1
 scenario: phase02b
@@ -47,11 +44,12 @@ def run_result(seed: str = "seed", run_index: int = 0) -> ScenarioResult:
     )
 
 
-def subprocess_environment() -> dict[str, str]:
-    environment = os.environ.copy()
-    existing = environment.get("PYTHONPATH")
-    environment["PYTHONPATH"] = str(SRC) + (os.pathsep + existing if existing else "")
-    return environment
+def pytest_command(test_file: Path) -> list[str]:
+    command = [sys.executable, "-m", "pytest", "-q"]
+    if os.environ.get("PYTEST_DISABLE_PLUGIN_AUTOLOAD"):
+        command.extend(("-p", "scenario_engine"))
+    command.append(str(test_file))
+    return command
 
 
 class Phase02BJsonPytestIntegrationTests(unittest.TestCase):
@@ -161,7 +159,7 @@ class Phase02BJsonPytestIntegrationTests(unittest.TestCase):
         document = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
         self.assertEqual(document["project"]["dependencies"], ["PyYAML==6.0.3"])
         self.assertEqual(document["project"]["optional-dependencies"]["pytest"],
-                         ["pytest>=9.1,<10"])
+                         ["pytest>=9.1,<10", "build>=1,<2"])
         self.assertEqual(document["project"]["entry-points"]["pytest11"]["scenario_engine"],
                          "scenario_engine.pytest_plugin")
 
@@ -169,7 +167,6 @@ class Phase02BJsonPytestIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             test_file = Path(directory) / "test_fixture.py"
             test_file.write_text(textwrap.dedent(f'''\
-                pytest_plugins = ["scenario_engine.pytest_plugin"]
                 from scenario_engine.result import ScenarioResult
                 SCENARIO = {SCENARIO!r}
                 def test_fixture(scenario_engine):
@@ -180,8 +177,7 @@ class Phase02BJsonPytestIntegrationTests(unittest.TestCase):
                     assert first.manifest.run_index == 4
             '''), encoding="utf-8")
             completed = subprocess.run(
-                [str(AUDIT_PYTHON), "-m", "pytest", "-q", str(test_file)],
-                cwd=directory, env=subprocess_environment(), capture_output=True, text=True,
+                pytest_command(test_file), cwd=directory, capture_output=True, text=True,
             )
         self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
 
@@ -191,7 +187,6 @@ class Phase02BJsonPytestIntegrationTests(unittest.TestCase):
             source.write_text(SCENARIO, encoding="utf-8")
             test_file = Path(directory) / "test_file_fixture.py"
             test_file.write_text(textwrap.dedent(f'''\
-                pytest_plugins = ["scenario_engine.pytest_plugin"]
                 from pathlib import Path
                 from scenario_engine.result import ScenarioResult
                 def test_file_fixture(scenario_engine):
@@ -201,8 +196,7 @@ class Phase02BJsonPytestIntegrationTests(unittest.TestCase):
                     assert result.final_state["money"].as_tuple().exponent == -2
             '''), encoding="utf-8")
             completed = subprocess.run(
-                [str(AUDIT_PYTHON), "-m", "pytest", "-q", str(test_file)],
-                cwd=directory, env=subprocess_environment(), capture_output=True, text=True,
+                pytest_command(test_file), cwd=directory, capture_output=True, text=True,
             )
         self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
 

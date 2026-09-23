@@ -9,6 +9,25 @@ permissions:
   contents: read
 
 jobs:
+  full-pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+      - name: Use Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install package and all test extras
+        run: python -m pip install -e '.[pytest,sqlalchemy,hypothesis,schemathesis]'
+      - name: Run the complete pytest suite
+        run: python -m pytest -q
+
   scenario-evidence:
     runs-on: ubuntu-latest
     timeout-minutes: 10
