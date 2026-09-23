@@ -4,11 +4,10 @@
 
 Deterministic Scenario Engine (DSE) creates reproducible, state-consistent
 business histories and deterministic scenario suites with ground truth for
-testing. The published distribution is `deterministic-scenario-engine` 2.0.0.
-Phase 3 evidence-interchange capabilities are implemented on `main` and the
-current source release candidate reports distribution version 2.1.0, while 2.1.0
-is not published. Its deterministic compatibility version remains
-`ENGINE_VERSION == "1.0.0"`, and its DSL version remains integer 1.
+testing. The source-tree distribution version is 2.1.0. Distribution release
+identity and deterministic compatibility identity are separate:
+`ENGINE_VERSION` remains 1.0.0 and DSL version remains 1. For authoritative
+public-release availability and history, see PyPI and GitHub Releases.
 
 ## Why it exists
 
@@ -67,9 +66,9 @@ Install only the named optional integrations you need:
 /tmp/scenario-engine-docs-venv/bin/python -m pip install '.[schemathesis]'
 ```
 
-The published distribution is `deterministic-scenario-engine` 2.0.0. Install the package
-with `pip install deterministic-scenario-engine`, or select an optional integration
-with a command such as `pip install 'deterministic-scenario-engine[pytest]'`.
+Install the package with `pip install deterministic-scenario-engine`, or select
+an optional integration with a command such as
+`pip install 'deterministic-scenario-engine[pytest]'`.
 
 ## Minimal quickstart
 
@@ -132,8 +131,7 @@ Unsupported cross-version replay fails explicitly. See the [determinism model](d
 ## Status
 
 Distribution release identity and deterministic engine compatibility are
-separate contracts. Version 2.0.0 has been published to PyPI and as a GitHub
-Release. This source tree reports the unpublished 2.1.0 release candidate;
-generated core manifests retain `ENGINE_VERSION` 1.0.0 and DSL 1. No 2.1.0 tag,
-GitHub Release, or package-index publication exists. The project is licensed
-under Apache-2.0.
+separate contracts. This source tree reports distribution version 2.1.0;
+generated core manifests retain `ENGINE_VERSION` 1.0.0 and DSL 1. PyPI and
+GitHub Releases are the authoritative sources for public-release availability
+and history. The project is licensed under Apache-2.0.

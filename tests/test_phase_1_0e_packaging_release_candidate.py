@@ -5,6 +5,7 @@ from hashlib import sha256
 from importlib.metadata import EntryPoint
 import json
 from pathlib import Path
+import re
 import sys
 import tomllib
 import unittest
@@ -120,29 +121,27 @@ class Phase10EPackagingReleaseCandidateTests(unittest.TestCase):
             historical_payload["manifest"].pop("engine_version")
             self.assertEqual(current_payload, historical_payload)
 
-    def test_docs_are_publication_ready_without_temporal_or_host_claims(self):
+    def test_package_readme_is_release_state_neutral(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         quickstart = (ROOT / "docs" / "quickstart.md").read_text(encoding="utf-8")
         combined = f"{readme}\n{quickstart}".lower()
         self.assertIn("pip install deterministic-scenario-engine", combined)
-        # HISTORICAL_CHECKPOINT_FACT: this test predates publication of 2.0.0.
-        # CURRENT_DOCUMENTATION_CONTRACT: stable release facts may be stated, but
-        # stale future-publication claims and transient local-RC guidance may not.
-        for stale_claim in (
-            "future publication",
-            "not currently available from pypi",
-            "has not been published",
-            "unpublished 2.0.0",
-            "no pypi or github release has occurred yet",
-        ):
-            with self.subTest(stale_claim=stale_claim):
-                self.assertNotIn(stale_claim, combined)
         self.assertNotIn("github.com/", combined)
         self.assertNotIn("/users/", combined)
         self.assertNotIn("phase3_2_validation_venv", combined)
-        self.assertIn("2.0.0 has been published", combined)
-        self.assertIn("2.1.0", combined)
-        self.assertIn("not published", combined)
+
+        current_version = re.escape(VERSION.lower())
+        forbidden_patterns = (
+            rf"(?:unpublished|not\s+published)[^\n]{{0,80}}{current_version}",
+            rf"{current_version}[^\n]{{0,80}}(?:unpublished|not\s+published)",
+            rf"no\s+{current_version}\s+tag(?:\s+exists)?",
+            r"no\s+github\s+release(?:\s+exists)?",
+            r"no\s+(?:package-index|pypi)\s+publication(?:\s+exists)?",
+            r"publication\s+has\s+not\s+occurred",
+        )
+        for pattern in forbidden_patterns:
+            with self.subTest(pattern=pattern):
+                self.assertIsNone(re.search(pattern, readme.lower()))
 
     def test_top_level_api_is_unchanged_by_version_authority_module(self):
         self.assertNotIn("VERSION", scenario_engine.__all__)
