@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import MISSING, fields
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
@@ -12,6 +13,9 @@ from scenario_engine import (
     run_scenario,
 )
 from scenario_engine.dsl.models import ScenarioDocument
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _document() -> ScenarioDocument:
@@ -64,3 +68,9 @@ steps:
     assert run_scenario(compile_document(parsed), "seed").to_json_bytes() == run_scenario(
         compile_document(explicit), "seed"
     ).to_json_bytes()
+
+
+def test_sdist_declares_phase3_ecommerce_public_workflow_example() -> None:
+    manifest_lines = (PROJECT_ROOT / "MANIFEST.in").read_text(encoding="utf-8").splitlines()
+
+    assert "include examples/phase3_ecommerce_evidence.py" in manifest_lines

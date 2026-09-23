@@ -4,6 +4,7 @@ include pyproject.toml
 recursive-include src *.py
 recursive-include docs *.md
 recursive-include examples *.yaml
+include examples/phase3_ecommerce_evidence.py
 recursive-include tests *.py
 global-exclude *.py[cod]
 global-exclude __pycache__
