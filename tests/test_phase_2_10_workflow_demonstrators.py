@@ -148,7 +148,7 @@ def test_fresh_tree_wheel_supports_workflow_public_commands(tmp_path: Path) -> N
         check=True,
     )
     wheels = list(wheelhouse.glob(f"deterministic_scenario_engine-{VERSION}-*.whl"))
-    assert VERSION == "2.1.0"
+    assert VERSION == "2.1.1"
     assert len(wheels) == 1
     wheel = wheels[0]
     installed = tmp_path / "installed"
@@ -175,7 +175,7 @@ def test_fresh_tree_wheel_supports_workflow_public_commands(tmp_path: Path) -> N
         text=True,
     )
     distribution_version, import_path = identity.stdout.splitlines()
-    assert distribution_version == VERSION == "2.1.0"
+    assert distribution_version == VERSION == "2.1.1"
     assert Path(import_path).is_relative_to(installed)
     validate = subprocess.run(
         [sys.executable, "-m", "scenario_engine.cli", "--json", "validate", "examples/cart.yaml"],

@@ -376,7 +376,7 @@ def test_suite_manifest_identity_order_child_reference_and_v1_preservation(tmp_p
 
 def test_top_level_api_and_v1_parser_are_unchanged(tmp_path: Path) -> None:
     assert "load_composed_suite" not in scenario_engine.__all__
-    assert VERSION == "2.1.0"
+    assert VERSION == "2.1.1"
     root_without_composition = _root("    alpha: alpha.yaml").replace(
         "composition:\n  modules:\n    alpha: alpha.yaml\n", "",
     )

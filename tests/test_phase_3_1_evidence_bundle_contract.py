@@ -253,7 +253,7 @@ def test_phase2_root_api_and_version_roles_remain_frozen() -> None:
     from scenario_engine.suite import RUN_SCHEMA_VERSION, SUITE_SCHEMA_VERSION
 
     assert tuple(scenario_engine.__all__) == FROZEN_ROOT_EXPORTS
-    assert VERSION == "2.1.0"
+    assert VERSION == "2.1.1"
     assert ENGINE_VERSION == "1.0.0"
     assert RUN_SCHEMA_VERSION == "suite.run/1"
     assert SUITE_SCHEMA_VERSION == "suite.manifest/1"

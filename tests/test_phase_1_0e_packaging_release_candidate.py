@@ -54,13 +54,20 @@ class Phase10EPackagingReleaseCandidateTests(unittest.TestCase):
             "scenario_engine._version.VERSION",
         )
         # Phase 2 changes package identity, not the frozen deterministic contract.
-        self.assertEqual(VERSION, "2.1.0")
+        self.assertEqual(VERSION, "2.1.1")
         self.assertEqual(ENGINE_VERSION, "1.0.0")
 
     def test_license_readme_and_build_backend_metadata(self):
         self.assertEqual(self.project["license"], "Apache-2.0")
         self.assertEqual(self.project["license-files"], ["LICENSE"])
         self.assertEqual(self.project["readme"], "README.md")
+        self.assertEqual(self.project["urls"], {
+            "Homepage": "https://github.com/imshahinul/deterministic-scenario-engine",
+            "Documentation": "https://github.com/imshahinul/deterministic-scenario-engine/tree/main/docs",
+            "Source": "https://github.com/imshahinul/deterministic-scenario-engine",
+            "Issues": "https://github.com/imshahinul/deterministic-scenario-engine/issues",
+            "Release Notes": "https://github.com/imshahinul/deterministic-scenario-engine/releases",
+        })
         self.assertIn("Apache License\n", (ROOT / "LICENSE").read_text(encoding="utf-8"))
         self.assertEqual(self.config["build-system"]["build-backend"], "setuptools.build_meta")
         self.assertEqual(self.config["build-system"]["requires"], ["setuptools>=77"])
@@ -126,7 +133,6 @@ class Phase10EPackagingReleaseCandidateTests(unittest.TestCase):
         quickstart = (ROOT / "docs" / "quickstart.md").read_text(encoding="utf-8")
         combined = f"{readme}\n{quickstart}".lower()
         self.assertIn("pip install deterministic-scenario-engine", combined)
-        self.assertNotIn("github.com/", combined)
         self.assertNotIn("/users/", combined)
         self.assertNotIn("phase3_2_validation_venv", combined)
 

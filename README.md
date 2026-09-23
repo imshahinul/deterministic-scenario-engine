@@ -4,7 +4,7 @@
 
 Deterministic Scenario Engine (DSE) creates reproducible, state-consistent
 business histories and deterministic scenario suites with ground truth for
-testing. The source-tree distribution version is 2.1.0. Distribution release
+testing. The source-tree distribution version is 2.1.1. Distribution release
 identity and deterministic compatibility identity are separate:
 `ENGINE_VERSION` remains 1.0.0 and DSL version remains 1. For authoritative
 public-release availability and history, see PyPI and GitHub Releases.
@@ -42,11 +42,11 @@ make expected behavior explicit.
   explicit adapters, closed lossless migrations, and fixture-directory export
 
 Core execution does not require a database, network service, plugin, or property
-testing framework. See [security assumptions and non-goals](docs/security-and-non-goals.md).
+testing framework. See [security assumptions and non-goals](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/security-and-non-goals.md).
 Neither Phase 2 nor Phase 3 adds hidden discovery, network, randomness,
 wall-clock, or ambient environment semantics. The historical Phase 2 contract
-is frozen in the [Phase 2 public contract](docs/phase2-public-contract.md); the
-additive evidence surface is frozen in the [Phase 3 public contract](docs/phase3-public-contract.md).
+is frozen in the [Phase 2 public contract](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/phase2-public-contract.md); the
+additive evidence surface is frozen in the [Phase 3 public contract](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/phase3-public-contract.md).
 
 ## Installation
 
@@ -72,7 +72,7 @@ an optional integration with a command such as
 
 ## Minimal quickstart
 
-The public [cart scenario](examples/cart.yaml) is an executable DSL 1 document.
+The public [cart scenario](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/examples/cart.yaml) is an executable DSL 1 document.
 Run it from the repository root:
 
 ```python
@@ -107,31 +107,31 @@ normalized result contains the same data under its `state` field.
 Generation derives from semantic `ExecutionAddress` values, not consumption of
 a mutable global random stream. Exact replay requires the same canonical
 scenario, explicit inputs, algorithms/plugins, and recorded execution context.
-Unsupported cross-version replay fails explicitly. See the [determinism model](docs/determinism.md),
-[reproducibility guide](docs/reproducibility.md), and normative
-[compatibility contract](docs/compatibility.md).
+Unsupported cross-version replay fails explicitly. See the [determinism model](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/determinism.md),
+[reproducibility guide](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/reproducibility.md), and normative
+[compatibility contract](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/compatibility.md).
 
 ## Documentation
 
-- [Quickstart](docs/quickstart.md)
-- [DSL 1 reference](docs/dsl-reference.md)
-- [Determinism model](docs/determinism.md)
-- [Reproducibility and replay](docs/reproducibility.md)
-- [Testing, faults, and oracle](docs/testing-oracle.md)
-- [Plugins](docs/plugins.md)
-- [SQLAlchemy adapter](docs/sqlalchemy.md)
-- [Hypothesis integration](docs/hypothesis.md)
-- [Schemathesis integration](docs/schemathesis.md)
-- [Public Python API](docs/api.md)
-- [Security assumptions and non-goals](docs/security-and-non-goals.md)
-- [Compatibility contract](docs/compatibility.md)
-- [Phase 2 public contract, CLI, and hard bounds](docs/phase2-public-contract.md)
-- [Phase 3 public contract and evidence interchange](docs/phase3-public-contract.md)
+- [Quickstart](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/quickstart.md)
+- [DSL 1 reference](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/dsl-reference.md)
+- [Determinism model](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/determinism.md)
+- [Reproducibility and replay](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/reproducibility.md)
+- [Testing, faults, and oracle](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/testing-oracle.md)
+- [Plugins](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/plugins.md)
+- [SQLAlchemy adapter](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/sqlalchemy.md)
+- [Hypothesis integration](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/hypothesis.md)
+- [Schemathesis integration](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/schemathesis.md)
+- [Public Python API](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/api.md)
+- [Security assumptions and non-goals](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/security-and-non-goals.md)
+- [Compatibility contract](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/compatibility.md)
+- [Phase 2 public contract, CLI, and hard bounds](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/phase2-public-contract.md)
+- [Phase 3 public contract and evidence interchange](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/phase3-public-contract.md)
 
 ## Status
 
 Distribution release identity and deterministic engine compatibility are
-separate contracts. This source tree reports distribution version 2.1.0;
+separate contracts. This source tree reports distribution version 2.1.1;
 generated core manifests retain `ENGINE_VERSION` 1.0.0 and DSL 1. PyPI and
 GitHub Releases are the authoritative sources for public-release availability
 and history. The project is licensed under Apache-2.0.

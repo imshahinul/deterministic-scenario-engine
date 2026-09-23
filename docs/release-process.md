@@ -11,6 +11,8 @@ or temporary release-candidate reports.
 Before building artifacts:
 
 - run the README release-state-neutrality test;
+- require `PRE_RC_PYPI_LINK_PORTABILITY=PASS` by rejecting repository-relative
+  file links in the package README and checking internal anchors separately;
 - confirm the configured package long-description material passes the same
   neutrality test.
 
@@ -23,7 +25,10 @@ absent. Package long-description material may not encode those transient facts.
 
 Immediately before `twine upload`, rerun the source README neutrality test and
 inspect the accepted wheel and sdist metadata to confirm their packaged
-README/long description is release-state neutral.
+README/long description is release-state neutral. Require
+`PREUPLOAD_PYPI_LINK_PORTABILITY=PASS` for both artifact descriptions, run
+`twine check` and record `TWINE_RENDER_CHECK=PASS`, and resolve every important
+absolute documentation target to record `PYPI_LINK_TARGET_CHECK=PASS`.
 
 ## Publication
 
@@ -39,7 +44,13 @@ Using fresh public observations rather than pre-upload text, verify:
 - the release tag targets the exact accepted commit;
 - the GitHub Release exists and its asset hashes exactly match;
 - the canonical README remains consistent with durable version semantics;
-- package documentation still satisfies the release-state policy.
+- package documentation still satisfies the release-state policy;
+- fresh inspection of the rendered PyPI project page proves that documentation,
+  examples, security, compatibility, license, and repository links resolve to
+  their intended destinations, recording `POSTPUBLICATION_PYPI_LINK_SMOKE=PASS`.
+
+`twine check` alone is not sufficient for link portability. The post-publication
+gate must inspect the live PyPI description and its rendered link targets.
 
 Only after every post-publication check passes may checkpoint evidence record
 `PHASE_COMPLETE=YES`. A post-publication check must never rely solely on text

@@ -25,6 +25,13 @@ classifiers = [
 ]
 dependencies = ["PyYAML==6.0.3"]
 
+[project.urls]
+Homepage = "https://github.com/imshahinul/deterministic-scenario-engine"
+Documentation = "https://github.com/imshahinul/deterministic-scenario-engine/tree/main/docs"
+Source = "https://github.com/imshahinul/deterministic-scenario-engine"
+Issues = "https://github.com/imshahinul/deterministic-scenario-engine/issues"
+"Release Notes" = "https://github.com/imshahinul/deterministic-scenario-engine/releases"
+
 [project.scripts]
 scenario = "scenario_engine.cli:main"
 
