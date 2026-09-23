@@ -162,11 +162,11 @@ def test_versions_publication_security_reference_and_links_are_frozen(tmp_path: 
     from scenario_engine.reference_packs import ecommerce_domain_pack, export_ecommerce_evidence
 
     result = run_scenario(compile_document(parse_yaml((ROOT / "examples/cart.yaml").read_text())), "phase3.11")
-    assert VERSION == "2.0.0" and ENGINE_VERSION == "1.0.0"
+    assert VERSION == "2.1.0" and ENGINE_VERSION == "1.0.0"
     assert result.manifest.engine_version == "1.0.0" and result.manifest.dsl_version == 1
     contract = CONTRACT.read_text()
-    assert "eventual Phase 3 release target=2.1.0" in contract
-    assert "2.1.0 is not published" in contract
+    assert "current source distribution version=2.1.0" in contract
+    assert "2.1.0, which is not published" in contract
     assert ecommerce_domain_pack().content_hash == "987651d083d7c87696ef10c377080e08a173a56bd64aa6114262e5f6e0c35bb6"
     workflow = export_ecommerce_evidence(tmp_path / "ecommerce-bundle")
     assert workflow.bundle.bundle_id == "db145c19d041ffbed668404a8945604e735d9db42c8f75068d657ba4a0c4c507"

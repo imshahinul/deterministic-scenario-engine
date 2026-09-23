@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Mapping
@@ -43,10 +43,10 @@ class ScenarioDocument:
     reference_clock_start: datetime
     initial_state: Mapping[str, Any]
     steps: tuple[StepDocument, ...]
-    resources: Mapping[str, Any] = MappingProxyType({})
+    resources: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
     validators: tuple[Mapping[str, Any], ...] = ()
     constraints: tuple[Mapping[str, Any], ...] = ()
-    subflows: Mapping[str, tuple[StepDocument, ...]] = MappingProxyType({})
+    subflows: Mapping[str, tuple[StepDocument, ...]] = field(default_factory=lambda: MappingProxyType({}))
     invariants: tuple[Mapping[str, Any], ...] = ()
     faults: tuple[Mapping[str, Any], ...] = ()
     oracle: Mapping[str, Any] | None = None
@@ -71,4 +71,4 @@ class CompiledScenario:
     start_step: str
     document: ScenarioDocument
     resources: Any = None
-    subflows: Mapping[str, tuple[CompiledStep | StepDocument, ...]] = MappingProxyType({})
+    subflows: Mapping[str, tuple[CompiledStep | StepDocument, ...]] = field(default_factory=lambda: MappingProxyType({}))

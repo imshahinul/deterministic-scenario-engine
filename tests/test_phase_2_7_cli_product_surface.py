@@ -246,4 +246,4 @@ def test_cli_static_purity_version_and_console_script_contract() -> None:
         assert imported.isdisjoint(forbidden)
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert 'scenario = "scenario_engine.cli:main"' in pyproject
-    assert 'VERSION = "2.0.0"' in (ROOT / "src/scenario_engine/_version.py").read_text(encoding="utf-8")
+    assert 'VERSION = "2.1.0"' in (ROOT / "src/scenario_engine/_version.py").read_text(encoding="utf-8")

@@ -1,5 +1,5 @@
 """Deterministic Phase 0.5 execution provenance."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Mapping
 from .values import normalize
@@ -13,7 +13,7 @@ class ProvenanceRecord:
     hook: str | None = None
     target: str | None = None
     outcome: str = "applied"
-    details: Mapping[str, Any] = MappingProxyType({})
+    details: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
 
     def normalized(self):
         return normalize({"kind": self.kind, "id": self.id, "execution_address": self.execution_address,

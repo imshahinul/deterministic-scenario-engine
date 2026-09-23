@@ -58,7 +58,7 @@ def _cases():
 def test_version_roles_are_explicit_and_dsl_remains_one() -> None:
     config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert config["tool"]["setuptools"]["dynamic"]["version"]["attr"] == "scenario_engine._version.VERSION"
-    assert VERSION == "2.0.0"
+    assert VERSION == "2.1.0"
     assert ENGINE_VERSION == scenario_engine.ENGINE_VERSION == "1.0.0"
     _, result = _result("cart.yaml", "s")
     assert result.manifest.engine_version == "1.0.0"

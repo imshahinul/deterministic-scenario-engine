@@ -5,9 +5,9 @@
 Deterministic Scenario Engine (DSE) creates reproducible, state-consistent
 business histories and deterministic scenario suites with ground truth for
 testing. The published distribution is `deterministic-scenario-engine` 2.0.0.
-Phase 3 evidence-interchange capabilities are implemented on `main` but remain
-unreleased; their eventual distribution target is 2.1.0. The current source
-distribution remains 2.0.0, its deterministic compatibility version remains
+Phase 3 evidence-interchange capabilities are implemented on `main` and the
+current source release candidate reports distribution version 2.1.0, while 2.1.0
+is not published. Its deterministic compatibility version remains
 `ENGINE_VERSION == "1.0.0"`, and its DSL version remains integer 1.
 
 ## Why it exists
@@ -133,7 +133,7 @@ Unsupported cross-version replay fails explicitly. See the [determinism model](d
 
 Distribution release identity and deterministic engine compatibility are
 separate contracts. Version 2.0.0 has been published to PyPI and as a GitHub
-Release. This source tree still reports distribution version 2.0.0; generated
-core manifests retain `ENGINE_VERSION` 1.0.0 and DSL 1. Phase 3 implementation
-on `main` is not published, no Phase 3 release candidate exists, and the eventual
-target is 2.1.0. The project is licensed under Apache-2.0.
+Release. This source tree reports the unpublished 2.1.0 release candidate;
+generated core manifests retain `ENGINE_VERSION` 1.0.0 and DSL 1. No 2.1.0 tag,
+GitHub Release, or package-index publication exists. The project is licensed
+under Apache-2.0.

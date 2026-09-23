@@ -277,7 +277,7 @@ def test_public_boundary_version_preservation_and_static_safety() -> None:
     from scenario_engine._version import VERSION
 
     assert "BatchPlan" not in scenario_engine.__all__
-    assert VERSION == "2.0.0"
+    assert VERSION == "2.1.0"
     forbidden = {"random", "secrets", "socket", "subprocess", "importlib", "os", "time", "urllib"}
     root = Path(__file__).parents[1] / "src/scenario_engine/batch"
     for path in root.glob("*.py"):

@@ -5,8 +5,8 @@
 This document is the normative additive contract for the implemented but
 unreleased Phase 3 evidence-interchange line. It makes deterministic evidence
 portable without changing the frozen execution engine. Version 2.0.0 is already
-published; the eventual Phase 3 distribution target is 2.1.0, which is not
-published and has no release candidate at this checkpoint.
+published; the Phase 3 source release candidate reports distribution version
+2.1.0, which is not published at this checkpoint.
 
 Phase 3 adds no package-root exports, execution semantics, DSL syntax, dependency,
 or automatic discovery. The historical [Phase 2 contract](phase2-public-contract.md)
@@ -262,16 +262,16 @@ import or arbitrary callable from artifacts.
 ## 15. Version strategy
 
 ```text
-current source distribution version=2.0.0
-eventual Phase 3 release target=2.1.0
+current source distribution version=2.1.0
+Phase 3 release target=2.1.0
 ENGINE_VERSION=1.0.0
 manifest.engine_version=1.0.0
 DSL=1
 ```
 
-Phase 3.11 performs no version bump. Distribution, engine, manifest, and DSL
-versions have separate meanings. Packaging and an authorized 2.1.0 bump belong
-only to Phase 3.12.
+Phase 3.12 authorizes the distribution version bump to 2.1.0. Distribution,
+engine, manifest, and DSL versions have separate meanings; `ENGINE_VERSION`,
+`manifest.engine_version`, and DSL remain unchanged.
 
 ## 16. Backward compatibility
 
@@ -293,6 +293,6 @@ workflow/pipeline framework.
 
 ## 18. Release state
 
-Versions 1.0.0 and 2.0.0 are published. Phase 3 implementation is on `main`, but
-2.1.0 is not published and no Phase 3 release candidate exists. Phase 3.11 is a
-contract/documentation freeze, not a release. Phase 3.12 has not started.
+Versions 1.0.0 and 2.0.0 are published. Phase 3 implementation is on `main`, and
+the source release candidate reports 2.1.0. Version 2.1.0 is not tagged,
+published to PyPI or TestPyPI, or released on GitHub.
