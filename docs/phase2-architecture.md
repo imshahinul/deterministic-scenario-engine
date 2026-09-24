@@ -275,7 +275,7 @@ From the 2026-09-03 freeze, the likely range is roughly late October through lat
 
 ## V1 Contract Validation
 
-Pre-mutation validation ran from repository root `/Users/smshahinulislam/Developer/scenario-engine` on branch `main`. HEAD/main/origin-main were `ee29f52f714e84f17e1048ce24192fcf1c69345a`, tree `2a61915d578dcb1c4ec94049350a24d2cabdf721`, divergence `0/0`, with zero staged, unstaged, or untracked paths. The sole remote was `origin`, resolving to public `imshahinul/deterministic-scenario-engine`; tag `1.0.0` peeled to the baseline and its tree.
+Pre-mutation validation ran from `<repository-root>` on branch `main`. HEAD/main/origin-main were `ee29f52f714e84f17e1048ce24192fcf1c69345a`, tree `2a61915d578dcb1c4ec94049350a24d2cabdf721`, divergence `0/0`, with zero staged, unstaged, or untracked paths. The sole remote was `origin`, resolving to public `imshahinul/deterministic-scenario-engine`; tag `1.0.0` peeled to the baseline and its tree.
 
 Validation used CPython 3.14.6 in isolated environment `/tmp/dse-phase2-0a-venv`, pytest 9.1.1, PyYAML 6.0.3, SQLAlchemy 2.0.52, Hypothesis 6.167.1, and Schemathesis 4.25.2, with repository `src` on `PYTHONPATH`. Canonical validation is `python -m pytest -q`; collection is `python -m pytest --collect-only -q`. It collected 280 tests and the full run passed: `280 passed, 136 subtests passed` in 41.94 seconds. Focused golden enforcement passed 4 tests and 3 subtests.
 
