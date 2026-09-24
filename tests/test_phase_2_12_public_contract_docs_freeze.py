@@ -62,7 +62,7 @@ def test_versions_errors_commands_and_entry_points_are_frozen() -> None:
     from scenario_engine.oracle_assertions import ORACLE_ASSERTION_SCHEMA_VERSION
     from scenario_engine.suite import READ_SCHEMA_VERSION, SUITE_SCHEMA_VERSION
 
-    assert VERSION == "2.1.1"
+    assert VERSION == "2.1.2"
     assert (COMPOSITION_CONTRACT_VERSION, MATRIX_PLAN_CONTRACT_VERSION) == (
         "composition.modules/1", "matrix.plan/1")
     assert (READ_SCHEMA_VERSION, SUITE_SCHEMA_VERSION) == (

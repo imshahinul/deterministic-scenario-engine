@@ -235,7 +235,7 @@ steps:
 
 def test_top_level_api_and_package_version_are_unchanged() -> None:
     assert "MatrixPlan" not in scenario_engine.__all__
-    assert VERSION == "2.1.1"
+    assert VERSION == "2.1.2"
 
 
 def test_static_matrix_package_has_no_nondeterministic_or_unsafe_imports() -> None:

@@ -58,7 +58,7 @@ def _cases():
 def test_version_roles_are_explicit_and_dsl_remains_one() -> None:
     config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert config["tool"]["setuptools"]["dynamic"]["version"]["attr"] == "scenario_engine._version.VERSION"
-    assert VERSION == "2.1.1"
+    assert VERSION == "2.1.2"
     assert ENGINE_VERSION == scenario_engine.ENGINE_VERSION == "1.0.0"
     _, result = _result("cart.yaml", "s")
     assert result.manifest.engine_version == "1.0.0"
@@ -120,4 +120,4 @@ def test_entry_points_and_release_candidate_wording_are_preserved() -> None:
     # transient publication state while historical contracts remain immutable.
     assert "unpublished 2.0.0 release candidate" not in docs
     assert "no pypi or github release has occurred yet" not in docs
-    assert "2.1.1" in docs
+    assert "2.1.2" in docs
