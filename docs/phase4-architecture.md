@@ -721,3 +721,17 @@ NEXT_ACTIVITY=OBSERVATION_HOLD
 ```
 
 This is a successful architecture freeze and an intentional implementation hold.
+
+## 25. Phase 4.1 owner-authorization amendment
+
+The evidence and authorization statements above record the historical Phase 4.0
+decision and remain unchanged: the external evidence state was `INSUFFICIENT` and
+was not reclassified. For the Phase 4.1 development track only, the project owner
+subsequently supplied an explicit authorization that supersedes the prior
+implementation hold without asserting that the external evidence gate passed:
+
+```text
+PHASE4_IMPLEMENTATION_AUTHORIZATION_SOURCE=PROJECT_OWNER_OVERRIDE
+PHASE4_EXTERNAL_EVIDENCE_REEVALUATED=NO
+PHASE4_1_AUTHORIZED=YES
+```

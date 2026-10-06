@@ -52,6 +52,7 @@ from .serialization import (
     parse_suite_bytes,
     parse_suite_text,
 )
+from .publication import publish_suite_bytes
 
 
 __all__ = (
@@ -65,6 +66,6 @@ __all__ = (
     "RUN_SCHEMA_VERSION", "ReadSupport", "RunManifestEnvelope", "SUITE_SCHEMA_VERSION",
     "SuiteContractError", "SuiteManifest", "SuiteSerializationError", "UnsupportedArtifactVersionError",
     "UnsupportedReplayContractError", "canonical_suite_bytes", "canonical_suite_text",
-    "parse_suite_bytes", "parse_suite_text", "read_v1_manifest_bytes", "read_v1_manifest_text",
+    "parse_suite_bytes", "parse_suite_text", "publish_suite_bytes", "read_v1_manifest_bytes", "read_v1_manifest_text",
     "read_v1_result_bytes", "read_v1_result_text",
 )

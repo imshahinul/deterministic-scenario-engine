@@ -97,7 +97,7 @@ For inputs/resources, continue with [`examples/resources.yaml`](../examples/reso
 and the [DSL reference](dsl-reference.md). For replay guarantees and limits, see
 [reproducibility](reproducibility.md) and [compatibility](compatibility.md).
 
-## 4. Phase 2 CLI path
+## 4. CLI run and replay path
 
 Run these from a source checkout after installation. Every source is an explicit
 local file, and every execution supplies its deterministic seed coordinate.
@@ -105,15 +105,30 @@ local file, and every execution supplies its deterministic seed coordinate.
 ```console
 scenario validate examples/cart.yaml
 scenario --json hash examples/cart.yaml
-scenario --json run examples/cart.yaml --seed quickstart --run-index 0 > /tmp/dse-result.json
+scenario --json run examples/cart.yaml --seed quickstart --run-index 0 --replay-out /tmp/dse-replay.json > /tmp/dse-result.json
+scenario --json replay /tmp/dse-replay.json --scenario examples/cart.yaml > /tmp/dse-replayed-result.json
 scenario --json inspect /tmp/dse-result.json --kind result
 scenario --json diff /tmp/dse-result.json /tmp/dse-result.json --kind result --mode first
 scenario --json matrix examples/cart.yaml --seed quickstart --dimensions '[{"name":"region","values":["us","eu"]}]' --describe
 ```
 
+The `--replay-out` destination must not already exist. It receives the supported,
+canonical `suite.run/1` replay artifact: a run-manifest envelope containing the
+scenario hash, engine/DSL compatibility coordinates, seed, run index, locale,
+reference clock, resource hashes, generator versions, and child reproducibility
+manifest. Replay requires the same scenario and, when the run used `--inputs`,
+the same explicit `--inputs`; hashes bind both to the recorded run and a mismatch
+fails closed. The replay result bytes equal the original deterministic result.
+
+`/tmp/dse-result.json` is an inspectable execution/result artifact. It is not a
+replay artifact and must not be passed to `scenario replay`. The separately
+written `/tmp/dse-replay.json` is replayable under its exact recorded engine,
+manifest, DSL, scenario, generator/plugin, clock, and resource compatibility
+requirements. Inspectability alone does not imply replayability.
+
 The diff exits 0 because the artifacts are equal. A valid unequal diff exits 1.
-For replay, batch-plan syntax, all flags, stdout/stderr rules and hard bounds,
-use the [Phase 2 public contract](phase2-public-contract.md#cli-contract).
+For batch-plan syntax, all flags, stdout/stderr rules and hard bounds, use the
+[Phase 2 public contract](phase2-public-contract.md#cli-contract).
 
 ## 5. Phase 3 local evidence interchange
 

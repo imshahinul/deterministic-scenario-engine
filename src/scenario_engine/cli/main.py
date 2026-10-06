@@ -14,6 +14,7 @@ from scenario_engine.batch import (
     DEFAULT_RETAINED_RESULT_BYTES, BatchError, BatchPlan, ExecutionMode,
     RunRequest, execute_batch,
 )
+from scenario_engine._version import ENGINE_VERSION
 from scenario_engine.canonical import canonical_scenario_hash
 from scenario_engine.composition import (
     ComposedSuite, CompositionBoundError, CompositionError,
@@ -48,9 +49,10 @@ from scenario_engine.matrix import (
     execute_matrix_case, expand_matrix,
 )
 from scenario_engine.suite import (
-    ArtifactBoundError, ArtifactReadError, RunManifestEnvelope,
-    SuiteSerializationError, UnsupportedReplayContractError,
-    parse_suite_bytes, read_v1_manifest_bytes, read_v1_result_bytes,
+    ArtifactBoundError, ArtifactReadError, CompatibilityRecord, ExecutionContext,
+    ExecutionReplaySupport, RunManifestEnvelope, SuiteSerializationError,
+    UnsupportedReplayContractError, canonical_suite_bytes, parse_suite_bytes,
+    publish_suite_bytes, read_v1_manifest_bytes, read_v1_result_bytes,
 )
 from scenario_engine.values import normalize
 
@@ -96,9 +98,16 @@ def _parser() -> argparse.ArgumentParser:
     run = commands.add_parser("run", help="execute a scenario")
     _source(run)
     _execution(run)
+    run.add_argument(
+        "--replay-out", metavar="PATH",
+        help="write a supported suite.run/1 replay artifact to an absent local path",
+    )
 
-    replay = commands.add_parser("replay", help="replay a supported recorded manifest")
-    replay.add_argument("source", help="local manifest JSON path or - for stdin")
+    replay = commands.add_parser(
+        "replay", help="replay a supported recorded manifest",
+        description="Replay a supported suite.run/1 recorded manifest.",
+    )
+    replay.add_argument("source", help="local suite.run/1 replay artifact path or - for stdin")
     replay.add_argument("--scenario", required=True, help="explicit local scenario YAML path")
     replay.add_argument("--inputs", help="bounded JSON object")
 
@@ -288,6 +297,8 @@ def _run(args: argparse.Namespace) -> tuple[bytes, bytes]:
     target, composed = _load_target(args.source, args.root)
     inputs = _json_argument(args.inputs, dict, None)
     if composed:
+        if args.replay_out is not None:
+            raise UnsupportedReplayContractError("composed-cli-run", ())
         result = execute_composed_suite(
             target, _seed(args.seed), run_index=args.run_index, locale=args.locale, inputs=inputs,
         ).result
@@ -295,8 +306,49 @@ def _run(args: argparse.Namespace) -> tuple[bytes, bytes]:
         result = run_scenario(
             target, _seed(args.seed), run_index=args.run_index, locale=args.locale, inputs=inputs,
         )
+    if args.replay_out is not None:
+        _write_replay_artifact(args.replay_out, _replay_envelope(result))
     data = _result_output(result)
     return data, data
+
+
+def _replay_envelope(result: Any) -> RunManifestEnvelope:
+    manifest = result.manifest
+    plugin_versions = {
+        key.removeprefix("plugin:"): value
+        for key, value in manifest.generator_versions.items()
+        if key.startswith("plugin:")
+    }
+    return RunManifestEnvelope(
+        root_scenario_identity=result.scenario_id,
+        execution_context=ExecutionContext(
+            manifest.root_seed, manifest.run_index, manifest.locale,
+            manifest.reference_clock_start,
+        ),
+        compatibility=CompatibilityRecord(
+            f"scenario-engine/{manifest.engine_version}",
+            ExecutionReplaySupport.SUPPORTED,
+            plugin_versions=plugin_versions,
+        ),
+        child_manifest=manifest,
+    )
+
+
+def _write_replay_artifact(destination: str, envelope: RunManifestEnvelope) -> None:
+    _reject_remote(destination)
+    if destination == "-":
+        raise _CLIError("replay output requires an explicit local path", CLIExitCode.USAGE)
+    path = Path(destination)
+    try:
+        publish_suite_bytes(canonical_suite_bytes(envelope), path)
+    except FileExistsError:
+        raise _CLIError("replay output path must not already exist", CLIExitCode.IO) from None
+    except OSError:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise _CLIError("unable to publish replay artifact", CLIExitCode.IO) from None
 
 
 def _manifest(value: Mapping[str, Any]) -> ReproducibilityManifest:
@@ -316,6 +368,7 @@ def _replay(args: argparse.Namespace) -> tuple[bytes, bytes]:
         if suite_value.child_manifest is None:
             raise UnsupportedReplayContractError(suite_value.compatibility.execution_contract, ())
         manifest = suite_value.child_manifest
+        _require_replay_compatibility(suite_value, scenario)
     else:
         read = read_v1_manifest_bytes(artifact)
         read.require_execution_replay()
@@ -323,6 +376,38 @@ def _replay(args: argparse.Namespace) -> tuple[bytes, bytes]:
     result = replay_scenario(scenario, manifest, inputs=inputs)
     data = result.to_json_bytes()
     return data, data
+
+
+def _require_replay_compatibility(envelope: RunManifestEnvelope, scenario: str) -> None:
+    manifest = envelope.child_manifest
+    if manifest is None:
+        raise ReplayCompatibilityError("child manifest is required")
+    expected_contract = f"scenario-engine/{ENGINE_VERSION}"
+    if envelope.compatibility.execution_contract != expected_contract:
+        raise ReplayCompatibilityError("execution_contract mismatch")
+    compiled = compile_document(parse_yaml(scenario))
+    if envelope.root_scenario_identity != compiled.scenario_id:
+        raise ReplayCompatibilityError("root_scenario_identity mismatch")
+    context = envelope.execution_context
+    coordinates = {
+        "root_seed": manifest.root_seed,
+        "run_index": manifest.run_index,
+        "locale": manifest.locale,
+        "reference_clock_start": manifest.reference_clock_start,
+    }
+    for field, expected in coordinates.items():
+        if getattr(context, field) != expected:
+            raise ReplayCompatibilityError(f"execution_context {field} mismatch")
+    plugin_versions = {
+        key.removeprefix("plugin:"): value
+        for key, value in manifest.generator_versions.items()
+        if key.startswith("plugin:")
+    }
+    if dict(envelope.compatibility.plugin_versions) != plugin_versions:
+        raise ReplayCompatibilityError("plugin_versions mismatch")
+    recorded_packs = {item.identity: item.version for item in envelope.compatibility.domain_packs}
+    if recorded_packs != dict(manifest.domain_pack_versions):
+        raise ReplayCompatibilityError("domain_pack_versions mismatch")
 
 
 def _hash(args: argparse.Namespace) -> tuple[bytes, bytes]:
