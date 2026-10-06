@@ -5,7 +5,10 @@ from scenario_engine.address import ExecutionAddress
 from scenario_engine.canonical import canonical_scenario_hash
 from scenario_engine.clock import LogicalClock
 from scenario_engine.ids import ID_VERSION
-from scenario_engine.manifest import ENGINE_VERSION, GENERATOR_VERSIONS, ReplayCompatibilityError, ReproducibilityManifest
+from scenario_engine.manifest import (
+    ENGINE_VERSION, GENERATOR_VERSIONS, ReplayCompatibilityError,
+    ReplayCompatibilityReason, ReproducibilityManifest,
+)
 from scenario_engine.result import ScenarioResult
 from scenario_engine.rng import RNG_VERSION
 from scenario_engine.resources import resolve_resources
@@ -205,7 +208,31 @@ def replay_scenario(yaml_text,manifest,*,inputs=None,plugins=None):
     expected={"scenario_canonical_hash":canonical_scenario_hash(scenario),"engine_version":ENGINE_VERSION,"dsl_version":document.dsl_version,
         "rng_algorithm_version":RNG_VERSION,"id_algorithm_version":ID_VERSION,"generator_versions":_generator_versions(document),"reference_clock_start":document.reference_clock_start}
     for field,current in expected.items():
-        if getattr(manifest,field)!=current: raise ReplayCompatibilityError(f"{field} mismatch")
-    if manifest.input_resource_hashes!=base.hashes(): raise ReplayCompatibilityError("input_resource_hashes mismatch")
-    if manifest.domain_pack_versions: raise ReplayCompatibilityError("domain_pack_versions unsupported in Phase 0.2A")
+        recorded=getattr(manifest,field)
+        if recorded!=current:
+            reason=(ReplayCompatibilityReason.ENGINE_VERSION_UNSUPPORTED if field=="engine_version"
+                else ReplayCompatibilityReason.SCENARIO_MISMATCH if field=="scenario_canonical_hash"
+                else ReplayCompatibilityReason.REPLAY_DATA_INCOMPLETE)
+            remediation=("USE_SUPPORTED_ENGINE" if field=="engine_version"
+                else "SUPPLY_EXACT_SCENARIO" if field=="scenario_canonical_hash"
+                else "SUPPLY_COMPLETE_REPLAY_DATA")
+            raise ReplayCompatibilityError(
+                f"{field} mismatch", reason=reason, artifact_contract="scenario.manifest/1",
+                expected=str(current), received=str(recorded), remediation=remediation,
+                migration=ReplayCompatibilityReason.MIGRATION_UNAVAILABLE,
+            )
+    if manifest.input_resource_hashes!=base.hashes():
+        raise ReplayCompatibilityError(
+            "input_resource_hashes mismatch", artifact_contract="scenario.manifest/1",
+            remediation="SUPPLY_COMPLETE_REPLAY_DATA",
+            migration=ReplayCompatibilityReason.MIGRATION_UNAVAILABLE,
+            missing=("input_resource_hashes",),
+        )
+    if manifest.domain_pack_versions:
+        raise ReplayCompatibilityError(
+            "domain_pack_versions unsupported in Phase 0.2A", artifact_contract="scenario.manifest/1",
+            remediation="USE_SUPPORTED_ENGINE",
+            migration=ReplayCompatibilityReason.MIGRATION_UNAVAILABLE,
+            missing=("domain_pack_versions",),
+        )
     return run_scenario(scenario,manifest.root_seed,manifest.run_index,locale=manifest.locale,inputs=inputs,plugins=registry)

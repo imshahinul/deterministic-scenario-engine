@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from enum import Enum
 from types import MappingProxyType
 from typing import Any, Mapping
 
@@ -17,8 +18,55 @@ from .values import normalize
 GENERATOR_VERSIONS = MappingProxyType({"int": RNG_VERSION, "logical_id": ID_VERSION})
 
 
+class ReplayCompatibilityReason(str, Enum):
+    """Frozen finite reason vocabulary for fail-closed replay diagnostics."""
+
+    ENGINE_VERSION_UNSUPPORTED = "ENGINE_VERSION_UNSUPPORTED"
+    MANIFEST_VERSION_UNSUPPORTED = "MANIFEST_VERSION_UNSUPPORTED"
+    SCENARIO_MISMATCH = "SCENARIO_MISMATCH"
+    REPLAY_DATA_INCOMPLETE = "REPLAY_DATA_INCOMPLETE"
+    MIGRATION_AVAILABLE = "MIGRATION_AVAILABLE"
+    MIGRATION_UNAVAILABLE = "MIGRATION_UNAVAILABLE"
+
+
 class ReplayCompatibilityError(ScenarioEngineError, ValueError):
-    """A manifest cannot be replayed by this exact engine contract."""
+    """A manifest cannot be replayed, with stable bounded compatibility context."""
+
+    category = "REPLAY_COMPATIBILITY"
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: ReplayCompatibilityReason = ReplayCompatibilityReason.REPLAY_DATA_INCOMPLETE,
+        artifact_contract: str | None = None,
+        expected: str | int | None = None,
+        received: str | int | None = None,
+        scenario_expected: str | None = None,
+        scenario_received: str | None = None,
+        remediation: str = "INSPECT_SOURCE_WITHOUT_REPLAY",
+        migration: ReplayCompatibilityReason | None = None,
+        missing: tuple[str, ...] = (),
+    ) -> None:
+        if migration not in (
+            None,
+            ReplayCompatibilityReason.MIGRATION_AVAILABLE,
+            ReplayCompatibilityReason.MIGRATION_UNAVAILABLE,
+        ):
+            raise ValueError("migration must be a frozen migration availability reason")
+        self.reason = reason
+        self.reason_code = reason.value
+        if "code" not in type(self).__dict__:
+            self.code = reason.value
+        self.artifact_contract = artifact_contract
+        self.expected = expected
+        self.received = received
+        self.scenario_expected = scenario_expected
+        self.scenario_received = scenario_received
+        self.remediation = remediation
+        self.migration = migration
+        self.missing = tuple(sorted(missing))
+        super().__init__(message)
 
 
 def _frozen_strings(value: Mapping[str, str], field_name: str) -> Mapping[str, str]:

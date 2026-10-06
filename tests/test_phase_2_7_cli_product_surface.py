@@ -120,7 +120,11 @@ def test_replay_supported_equals_library_and_v1_contract_is_rejected(scenario_fi
     rejected = invoke("replay", str(v1), "--scenario", str(scenario_file), "--inputs", '{"selected":4}')
     assert rejected.returncode == CLIExitCode.REPLAY_COMPATIBILITY
     assert rejected.stdout == b""
-    assert rejected.stderr == b"scenario: error: execution replay is not supported for the recorded contract\n"
+    assert rejected.stderr == (
+        b"scenario: error: code=ENGINE_VERSION_UNSUPPORTED; category=REPLAY_COMPATIBILITY; "
+        b"artifact_contract=1.0.0; expected=none; received=1.0.0; "
+        b"migration=MIGRATION_UNAVAILABLE; next_action=USE_SUPPORTED_ENGINE\n"
+    )
 
 
 def test_hash_is_semantic_and_formatting_independent(scenario_file: Path, tmp_path: Path) -> None:

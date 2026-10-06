@@ -116,7 +116,9 @@ def test_malformed_and_incomplete_replay_artifacts_fail_closed(
     artifact = tmp_path / "invalid.json"
     artifact.write_bytes(payload)
     result = invoke("replay", str(artifact), "--scenario", str(scenario), "--inputs", '{"selected":7}')
-    assert result.returncode == CLIExitCode.VALIDATION
+    expected = (CLIExitCode.REPLAY_COMPATIBILITY
+                if payload == b'{"$model":"RunManifestEnvelope"}' else CLIExitCode.VALIDATION)
+    assert result.returncode == expected
     assert result.stdout == b""
     assert b"Traceback" not in result.stderr
 
@@ -134,7 +136,7 @@ def test_unsupported_manifest_version_and_missing_artifact_fail_closed(
     unsupported.write_text(json.dumps(raw, sort_keys=True, separators=(",", ":")), encoding="utf-8")
     version = invoke("replay", str(unsupported), "--scenario", str(scenario), "--inputs", '{"selected":7}')
     missing = invoke("replay", str(tmp_path / "missing.json"), "--scenario", str(scenario))
-    assert version.returncode == CLIExitCode.VALIDATION
+    assert version.returncode == CLIExitCode.REPLAY_COMPATIBILITY
     assert missing.returncode == CLIExitCode.IO
     assert version.stdout == missing.stdout == b""
 

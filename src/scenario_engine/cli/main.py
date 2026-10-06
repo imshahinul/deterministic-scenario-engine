@@ -43,7 +43,9 @@ from scenario_engine.inspection import (
     InspectionBoundError, InspectionError, canonical_explanation_bytes,
     canonical_inspection_bytes, explain_result, inspect,
 )
-from scenario_engine.manifest import ReplayCompatibilityError, ReproducibilityManifest
+from scenario_engine.manifest import (
+    ReplayCompatibilityError, ReplayCompatibilityReason, ReproducibilityManifest,
+)
 from scenario_engine.matrix import (
     MatrixDimension, MatrixError, MatrixPlan, execute_matrix,
     execute_matrix_case, expand_matrix,
@@ -105,7 +107,10 @@ def _parser() -> argparse.ArgumentParser:
 
     replay = commands.add_parser(
         "replay", help="replay a supported recorded manifest",
-        description="Replay a supported suite.run/1 recorded manifest.",
+        description=(
+            "Replay a supported suite.run/1 recorded manifest. Incompatibility exits 5 and "
+            "reports a stable replay reason code on stderr."
+        ),
     )
     replay.add_argument("source", help="local suite.run/1 replay artifact path or - for stdin")
     replay.add_argument("--scenario", required=True, help="explicit local scenario YAML path")
@@ -359,14 +364,30 @@ def _replay(args: argparse.Namespace) -> tuple[bytes, bytes]:
     artifact = _read(args.source)
     scenario = _text(_read(args.scenario), "scenario")
     inputs = _json_argument(args.inputs, dict, None)
+    recognized_envelope = _require_supported_replay_schema(artifact)
     try:
         suite_value = parse_suite_bytes(artifact)
     except SuiteSerializationError:
+        if recognized_envelope:
+            raise ReplayCompatibilityError(
+                "suite.run/1 replay data is incomplete or invalid",
+                reason=ReplayCompatibilityReason.REPLAY_DATA_INCOMPLETE,
+                artifact_contract="suite.run/1",
+                remediation="SUPPLY_COMPLETE_REPLAY_DATA",
+                migration=ReplayCompatibilityReason.MIGRATION_UNAVAILABLE,
+            ) from None
         suite_value = None
     if isinstance(suite_value, RunManifestEnvelope):
         suite_value.compatibility.require_execution_replay()
         if suite_value.child_manifest is None:
-            raise UnsupportedReplayContractError(suite_value.compatibility.execution_contract, ())
+            raise ReplayCompatibilityError(
+                "embedded reproducibility manifest is required",
+                reason=ReplayCompatibilityReason.REPLAY_DATA_INCOMPLETE,
+                artifact_contract=suite_value.schema_version,
+                remediation="SUPPLY_COMPLETE_REPLAY_DATA",
+                migration=ReplayCompatibilityReason.MIGRATION_UNAVAILABLE,
+                missing=("child_manifest",),
+            )
         manifest = suite_value.child_manifest
         _require_replay_compatibility(suite_value, scenario)
     else:
@@ -378,16 +399,71 @@ def _replay(args: argparse.Namespace) -> tuple[bytes, bytes]:
     return data, data
 
 
+def _require_supported_replay_schema(artifact: bytes) -> bool:
+    """Classify safely readable replay schema metadata before strict model parsing."""
+    try:
+        raw = json.loads(
+            artifact.decode("utf-8"), object_pairs_hook=_unique_object,
+            parse_constant=_reject_constant,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return False
+    if not isinstance(raw, Mapping) or raw.get("$model") != "RunManifestEnvelope":
+        return False
+    received = raw.get("schema_version")
+    if received is None:
+        raise ReplayCompatibilityError(
+            "replay artifact contract coordinate is missing",
+            reason=ReplayCompatibilityReason.REPLAY_DATA_INCOMPLETE,
+            remediation="SUPPLY_COMPLETE_REPLAY_DATA",
+            migration=ReplayCompatibilityReason.MIGRATION_UNAVAILABLE,
+            missing=("schema_version",),
+        )
+    if received != "suite.run/1":
+        raise ReplayCompatibilityError(
+            "replay artifact contract is unsupported",
+            reason=ReplayCompatibilityReason.MANIFEST_VERSION_UNSUPPORTED,
+            artifact_contract=str(received) if received is not None else None,
+            expected="suite.run/1",
+            received=str(received) if received is not None else "missing",
+            remediation="USE_SUPPORTED_MANIFEST_OR_MIGRATION",
+            migration=ReplayCompatibilityReason.MIGRATION_UNAVAILABLE,
+        )
+    return True
+
+
 def _require_replay_compatibility(envelope: RunManifestEnvelope, scenario: str) -> None:
     manifest = envelope.child_manifest
     if manifest is None:
-        raise ReplayCompatibilityError("child manifest is required")
+        raise ReplayCompatibilityError(
+            "child manifest is required",
+            artifact_contract=envelope.schema_version,
+            remediation="SUPPLY_COMPLETE_REPLAY_DATA",
+            migration=ReplayCompatibilityReason.MIGRATION_UNAVAILABLE,
+            missing=("child_manifest",),
+        )
     expected_contract = f"scenario-engine/{ENGINE_VERSION}"
     if envelope.compatibility.execution_contract != expected_contract:
-        raise ReplayCompatibilityError("execution_contract mismatch")
+        raise ReplayCompatibilityError(
+            "execution_contract mismatch",
+            reason=ReplayCompatibilityReason.ENGINE_VERSION_UNSUPPORTED,
+            artifact_contract=envelope.schema_version,
+            expected=expected_contract,
+            received=envelope.compatibility.execution_contract,
+            remediation="USE_SUPPORTED_ENGINE",
+            migration=ReplayCompatibilityReason.MIGRATION_UNAVAILABLE,
+        )
     compiled = compile_document(parse_yaml(scenario))
     if envelope.root_scenario_identity != compiled.scenario_id:
-        raise ReplayCompatibilityError("root_scenario_identity mismatch")
+        raise ReplayCompatibilityError(
+            "root_scenario_identity mismatch",
+            reason=ReplayCompatibilityReason.SCENARIO_MISMATCH,
+            artifact_contract=envelope.schema_version,
+            scenario_expected=envelope.root_scenario_identity,
+            scenario_received=compiled.scenario_id,
+            remediation="SUPPLY_EXACT_SCENARIO",
+            migration=ReplayCompatibilityReason.MIGRATION_UNAVAILABLE,
+        )
     context = envelope.execution_context
     coordinates = {
         "root_seed": manifest.root_seed,
@@ -397,17 +473,41 @@ def _require_replay_compatibility(envelope: RunManifestEnvelope, scenario: str) 
     }
     for field, expected in coordinates.items():
         if getattr(context, field) != expected:
-            raise ReplayCompatibilityError(f"execution_context {field} mismatch")
+            raise ReplayCompatibilityError(
+                f"execution_context {field} mismatch",
+                artifact_contract=envelope.schema_version,
+                expected=_diagnostic_value(expected),
+                received=_diagnostic_value(getattr(context, field)),
+                remediation="SUPPLY_COMPLETE_REPLAY_DATA",
+                migration=ReplayCompatibilityReason.MIGRATION_UNAVAILABLE,
+                missing=(field,),
+            )
     plugin_versions = {
         key.removeprefix("plugin:"): value
         for key, value in manifest.generator_versions.items()
         if key.startswith("plugin:")
     }
     if dict(envelope.compatibility.plugin_versions) != plugin_versions:
-        raise ReplayCompatibilityError("plugin_versions mismatch")
+        raise ReplayCompatibilityError(
+            "plugin_versions mismatch", artifact_contract=envelope.schema_version,
+            remediation="SUPPLY_COMPLETE_REPLAY_DATA",
+            migration=ReplayCompatibilityReason.MIGRATION_UNAVAILABLE,
+            missing=("plugin_versions",),
+        )
     recorded_packs = {item.identity: item.version for item in envelope.compatibility.domain_packs}
     if recorded_packs != dict(manifest.domain_pack_versions):
-        raise ReplayCompatibilityError("domain_pack_versions mismatch")
+        raise ReplayCompatibilityError(
+            "domain_pack_versions mismatch", artifact_contract=envelope.schema_version,
+            remediation="SUPPLY_COMPLETE_REPLAY_DATA",
+            migration=ReplayCompatibilityReason.MIGRATION_UNAVAILABLE,
+            missing=("domain_pack_versions",),
+        )
+
+
+def _diagnostic_value(value: Any) -> str | int:
+    if isinstance(value, (str, int)) and not isinstance(value, bool):
+        return value
+    return _canonical(value).decode("utf-8")
 
 
 def _hash(args: argparse.Namespace) -> tuple[bytes, bytes]:
@@ -622,6 +722,26 @@ def _diagnostic(message: str) -> None:
     sys.stderr.write(f"scenario: error: {safe}\n")
 
 
+def _replay_diagnostic(error: ReplayCompatibilityError) -> None:
+    fields = [f"code={error.reason_code}", f"category={error.category}"]
+    if error.artifact_contract is not None:
+        fields.append(f"artifact_contract={error.artifact_contract}")
+    if error.expected is not None:
+        fields.append(f"expected={error.expected}")
+    if error.received is not None:
+        fields.append(f"received={error.received}")
+    if error.scenario_expected is not None:
+        fields.append(f"scenario_expected={error.scenario_expected}")
+    if error.scenario_received is not None:
+        fields.append(f"scenario_received={error.scenario_received}")
+    if error.missing:
+        fields.append(f"missing={','.join(error.missing)}")
+    if error.migration is not None:
+        fields.append(f"migration={error.migration.value}")
+    fields.append(f"next_action={error.remediation}")
+    _diagnostic("; ".join(fields))
+
+
 def _mapped(error: Exception) -> CLIExitCode:
     if isinstance(error, (UnsupportedReplayContractError, ReplayCompatibilityError)):
         return CLIExitCode.REPLAY_COMPATIBILITY
@@ -668,10 +788,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return int(error.code)
     except Exception as error:
         code = _mapped(error)
+        if isinstance(error, ReplayCompatibilityError):
+            _replay_diagnostic(error)
+            return int(code)
         if code is CLIExitCode.INTERNAL:
             message = "unexpected internal error"
-        elif code is CLIExitCode.REPLAY_COMPATIBILITY:
-            message = "execution replay is not supported for the recorded contract"
         else:
             message = f"{type(error).__name__} occurred"
         _diagnostic(message)

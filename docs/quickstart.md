@@ -116,9 +116,20 @@ The `--replay-out` destination must not already exist. It receives the supported
 canonical `suite.run/1` replay artifact: a run-manifest envelope containing the
 scenario hash, engine/DSL compatibility coordinates, seed, run index, locale,
 reference clock, resource hashes, generator versions, and child reproducibility
-manifest. Replay requires the same scenario and, when the run used `--inputs`,
-the same explicit `--inputs`; hashes bind both to the recorded run and a mismatch
-fails closed. The replay result bytes equal the original deterministic result.
+ manifest. Replay requires the same scenario and, when the run used `--inputs`,
+ the same explicit `--inputs`; hashes bind both to the recorded run and a mismatch
+ fails closed. The replay result bytes equal the original deterministic result.
+
+Replay incompatibility exits with code 5 and writes one deterministic bounded
+diagnostic to stderr. Its stable `code` is one of
+`ENGINE_VERSION_UNSUPPORTED`, `MANIFEST_VERSION_UNSUPPORTED`,
+`SCENARIO_MISMATCH`, or `REPLAY_DATA_INCOMPLETE`; migration availability is
+reported separately as `MIGRATION_AVAILABLE` or `MIGRATION_UNAVAILABLE` when it
+can be determined safely. The diagnostic includes applicable supported/received
+contract or scenario identity context and a stable `next_action`. These reasons
+only explain rejection: they never relax exact replay checks or migrate an
+artifact automatically. `--json` does not emit the future `scenario.error/1`
+envelope at this checkpoint; replay failures retain deterministic stderr.
 
 `/tmp/dse-result.json` is an inspectable execution/result artifact. It is not a
 replay artifact and must not be passed to `scenario replay`. The separately

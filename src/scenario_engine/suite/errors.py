@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from scenario_engine.errors import ScenarioEngineError
-from scenario_engine.manifest import ReplayCompatibilityError
+from scenario_engine.manifest import ReplayCompatibilityError, ReplayCompatibilityReason
 
 
 class SuiteContractError(ScenarioEngineError, ValueError):
@@ -47,5 +47,11 @@ class UnsupportedReplayContractError(ReplayCompatibilityError):
         supported = ",".join(self.supported_contracts) if self.supported_contracts else "none"
         super().__init__(
             f"{self.code}: recorded engine version {recorded_version}; "
-            f"supported execution contracts: {supported}"
+            f"supported execution contracts: {supported}",
+            reason=ReplayCompatibilityReason.ENGINE_VERSION_UNSUPPORTED,
+            artifact_contract=recorded_version,
+            expected=supported,
+            received=recorded_version,
+            remediation="USE_SUPPORTED_ENGINE",
+            migration=ReplayCompatibilityReason.MIGRATION_UNAVAILABLE,
         )

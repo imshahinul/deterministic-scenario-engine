@@ -29,7 +29,8 @@ PUBLIC_DOCS = (
 
 PUBLIC_MANIFESTS = {
     "scenario_engine": (33, "f19f9c8ebe3fd5574550fea1fdefc5a20fa004a4913978e8bf5ab1e447278a50"),
-    "scenario_engine.suite": (44, "7db8a4edf260d1d16960203dfa43672d1d9cb8e4eed1624be87a9201ded59512"),
+    # Phase 4.1 additively exposed publish_suite_bytes for the public replay workflow.
+    "scenario_engine.suite": (45, "2aa92ef099e841092afdfac9d8fbf7f2b5bd48898383b8810afdd85ed3116e98"),
     "scenario_engine.composition": (29, "689f1fecb3bbbe4822ce523e09084857f9da625a31b4b1e9bbc447d3bc425fe7"),
     "scenario_engine.matrix": (25, "90611e656a435284db4b92dac84e1aa4d6b55b5a2172094ed3fa8598c86f15b3"),
     "scenario_engine.batch": (32, "59876678a4f4349a66b6caff4583e3cf8eb02425e3c7fc2b47d047edab1ad834"),
