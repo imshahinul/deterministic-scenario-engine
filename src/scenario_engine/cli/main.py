@@ -114,13 +114,24 @@ class _CLIError(Exception):
 
 
 class _Parser(argparse.ArgumentParser):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        kwargs.setdefault("formatter_class", argparse.RawDescriptionHelpFormatter)
+        super().__init__(*args, **kwargs)
+
     def error(self, message: str) -> None:
         raise _CLIError("invalid command-line arguments", CLIExitCode.USAGE)
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = _Parser(prog="scenario", description="Deterministic Scenario Engine")
-    parser.add_argument("--json", action="store_true", help="emit canonical JSON")
+    parser = _Parser(
+        prog="scenario",
+        description="Deterministic Scenario Engine installed-package public workflow command surface.",
+        epilog="Use 'scenario COMMAND --help' for each public workflow's command details.",
+    )
+    parser.add_argument(
+        "--json", action="store_true",
+        help="emit canonical JSON; errors use the scenario.error/1 machine envelope",
+    )
     commands = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
     validate = commands.add_parser("validate", help="validate a scenario without execution")
@@ -131,10 +142,12 @@ def _parser() -> argparse.ArgumentParser:
     _source(validate)
 
     scaffold = commands.add_parser(
-        "scaffold", help="propose an offline authoring draft without execution",
+        "scaffold", help="propose offline deterministic DSL for later review and validation",
         description=(
-            "Propose deterministic DSL 1 authoring material. The command validates but never "
-            "executes the draft; inspect and freeze it before a later explicit run."
+            "Propose deterministic DSL 1 authoring material with the offline default provider. "
+            "No API key or runtime LLM is required. The command never executes the draft: treat "
+            "generated DSL as untrusted, inspect it, pass it through ordinary validation, and "
+            "human-review/freeze it before a later explicit run."
         ),
     )
     scaffold.add_argument("scenario_id", help="bounded scenario identifier")
@@ -151,7 +164,14 @@ def _parser() -> argparse.ArgumentParser:
         help=f"authoring provider (default: {DEFAULT_SCAFFOLD_PROVIDER}; offline)",
     )
 
-    run = commands.add_parser("run", help="execute a scenario")
+    run = commands.add_parser(
+        "run", help="execute a scenario and optionally write a suite.run/1 replay artifact",
+        description=(
+            "Execute a validated scenario and emit its normal scenario.result/1 result. "
+            "--replay-out separately writes a supported suite.run/1 replay artifact; a normal "
+            "result is not automatically replayable."
+        ),
+    )
     _source(run)
     _execution(run)
     run.add_argument(
@@ -160,7 +180,7 @@ def _parser() -> argparse.ArgumentParser:
     )
 
     replay = commands.add_parser(
-        "replay", help="replay a supported recorded manifest",
+        "replay", help="replay a supported suite.run/1 artifact with fail-closed compatibility",
         description=(
             "Replay a supported suite.run/1 recorded manifest. Incompatibility exits 5 and "
             "reports a stable replay reason code on stderr."
@@ -181,17 +201,26 @@ def _parser() -> argparse.ArgumentParser:
     hash_command = commands.add_parser("hash", help="print semantic scenario identity")
     _source(hash_command)
 
-    inspect_command = commands.add_parser("inspect", help="inspect a recorded artifact")
+    inspect_command = commands.add_parser(
+        "inspect", help="summarize normalized evidence from a supported recorded artifact",
+        description="Read and summarize supported recorded evidence without re-executing it.",
+    )
     inspect_command.add_argument("source", help="local artifact JSON path or - for stdin")
     inspect_command.add_argument(
         "--kind", choices=("result", "manifest", "suite"), default="result",
         help="artifact contract",
     )
 
-    explain = commands.add_parser("explain", help="explain a recorded result")
+    explain = commands.add_parser(
+        "explain", help="explain step and state-change evidence in a recorded result",
+        description="Explain available causal step and state-change evidence from a supported result without inventing missing facts.",
+    )
     explain.add_argument("source", help="local result JSON path or - for stdin")
 
-    difference = commands.add_parser("diff", help="semantically compare two execution artifacts")
+    difference = commands.add_parser(
+        "diff", help="compare two recorded execution artifacts (not scenario definitions)",
+        description="Semantically compare two supported recorded execution artifacts. Use diff-definition for validated DSL definitions.",
+    )
     difference.add_argument("left", help="first local artifact JSON path or -")
     difference.add_argument("right", help="second local artifact JSON path or -")
     difference.add_argument("--kind", choices=("result", "manifest", "suite"), default="result")
@@ -202,16 +231,22 @@ def _parser() -> argparse.ArgumentParser:
         "diff-definition", help="structurally compare two validated scenario definitions",
         description=(
             "Compare validated scenario definitions structurally, independent of YAML formatting. "
-            "This is distinct from 'scenario diff', which compares execution artifacts."
+            "Mapping-key order and formatting-only changes are ignored; changes use "
+            "scenario.semantic-address/1 addresses. This is distinct from 'scenario diff', "
+            "which compares execution artifacts, and does not run impact analysis."
         ),
     )
     definition_diff.add_argument("left", help="first local scenario YAML path or -")
     definition_diff.add_argument("right", help="second local scenario YAML path or -")
 
     impact = commands.add_parser(
-        "impact", help="conservatively analyze potential effects of definition changes",
+        "impact", help="conservatively analyze possible impact of definition changes",
         description=("Statically analyze two validated scenario definitions using their authoritative "
-                     "structural diff. Reports may-impact only. UNKNOWN != UNAFFECTED."),
+                     "structural diff. Classifications are DIRECT, TRANSITIVE_POSSIBLE, and "
+                     "UNKNOWN. Reports are may-impact only: UNKNOWN does not mean unaffected "
+                     "(UNKNOWN != UNAFFECTED), "
+                     "and amplification is an affected-entity fraction, not a probability. No "
+                     "behavioral-equivalence claim is made."),
     )
     impact.add_argument("left", help="before local scenario YAML path or -")
     impact.add_argument("right", help="target local scenario YAML path or -")
@@ -232,11 +267,11 @@ def _parser() -> argparse.ArgumentParser:
     batch.add_argument("--workers", type=int, default=1, help="bounded execution strategy")
     batch.add_argument("--max-in-flight", type=int, default=64, help="bounded scheduling window")
 
-    export = commands.add_parser("export", help="export a validated local evidence bundle")
+    export = commands.add_parser("export", help="copy a verified local evidence bundle to an absent destination")
     export.add_argument("source", help="absolute local filesystem path to an evidence bundle root")
     export.add_argument("destination", help="absent absolute local filesystem path for the destination directory")
 
-    verify = commands.add_parser("verify", help="verify a local evidence bundle")
+    verify = commands.add_parser("verify", help="verify integrity of a local evidence bundle")
     verify.add_argument("bundle", help="absolute local filesystem path to an evidence bundle root")
 
     migrate = commands.add_parser("migrate", help="execute a planned lossless migration")

@@ -52,57 +52,33 @@ additive evidence surface is frozen in the [Phase 3 public contract](https://git
 
 ## Installation
 
-From a source checkout, use a virtual environment and install the checkout:
+Install the published package and use its `scenario` entry point:
 
 ```console
-python3 -m venv /tmp/scenario-engine-docs-venv
-/tmp/scenario-engine-docs-venv/bin/python -m pip install .
+python3 -m pip install deterministic-scenario-engine
+scenario --help
 ```
 
 Install only the named optional integrations you need:
 
 ```console
-/tmp/scenario-engine-docs-venv/bin/python -m pip install '.[pytest]'
-/tmp/scenario-engine-docs-venv/bin/python -m pip install '.[sqlalchemy]'
-/tmp/scenario-engine-docs-venv/bin/python -m pip install '.[hypothesis]'
-/tmp/scenario-engine-docs-venv/bin/python -m pip install '.[schemathesis]'
+python3 -m pip install 'deterministic-scenario-engine[pytest]'
+python3 -m pip install 'deterministic-scenario-engine[sqlalchemy]'
+python3 -m pip install 'deterministic-scenario-engine[hypothesis]'
+python3 -m pip install 'deterministic-scenario-engine[schemathesis]'
 ```
 
-Install the package with `pip install deterministic-scenario-engine`, or select
-an optional integration with a command such as
-`pip install 'deterministic-scenario-engine[pytest]'`.
+Installing the current checkout with `python3 -m pip install .` is a
+source-development-only alternative.
 
 ## Minimal quickstart
 
-The public [cart scenario](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/examples/cart.yaml) is an executable DSL 1 document.
-Run it from the repository root:
-
-```python
-from pathlib import Path
-
-from scenario_engine import (
-    compile_document,
-    parse_yaml,
-    replay_scenario,
-    run_scenario,
-)
-
-yaml_text = Path("examples/cart.yaml").read_text(encoding="utf-8")
-document = parse_yaml(yaml_text)
-scenario = compile_document(document)
-result = run_scenario(scenario, root_seed="quickstart", run_index=0)
-
-print(result.final_state["checkout_complete"])
-print(result.trace())
-stable_bytes = result.to_json_bytes()
-manifest = result.manifest
-
-replayed = replay_scenario(yaml_text, manifest)
-assert replayed.to_json_bytes() == stable_bytes
-```
-
-`ScenarioResult.final_state` is the supported state-reading property; the stable
-normalized result contains the same data under its `state` field.
+The [canonical installed-package workflows](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/quickstart.md)
+start by creating a complete portable DSL file under `/tmp/dse-demo`; they do
+not require a source checkout or files from this repository. The guide covers
+validate, run → replay, inspect/explain, both diff commands, conservative impact
+analysis, export → verify, the static trace viewer, scaffold → validate, and the
+human/machine diagnostic contract.
 
 ## Determinism contract
 
@@ -113,40 +89,14 @@ Unsupported cross-version replay fails explicitly. See the [determinism model](h
 [reproducibility guide](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/reproducibility.md), and normative
 [compatibility contract](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/compatibility.md).
 
-## Structural definition comparison
+## Canonical command workflows
 
-`scenario diff` compares recorded execution artifacts. The separate
-`scenario diff-definition scenario-a.yaml scenario-b.yaml` command validates and
-structurally compares two DSL 1 definitions without executing either one. Its
-JSON result uses `scenario.definition-diff/1`; changed entities use canonical
-`scenario.semantic-address/1` addresses rather than YAML paths.
-
-Comments, whitespace, YAML mapping-key order, and equivalent serialization
-layout produce zero changes. A real transition change is rendered as, for
-example, `CHANGED scenario:/step/checkout/transition/target`. Ordered DSL 1
-sequences remain ordered: emit order and control-flow branch case order are
-compared as structure. Identifier-keyed declarations (steps, generators,
-derives, writes, faults, invariants, constraints, validators, and resources) are
-compared by identity; step list order is represented by validated transitions.
-Renames are conservatively reported as removal plus addition. This command
-reports structural changes only; it performs no impact analysis and makes no
-behavioral-equivalence claim.
-
-## Offline trace viewer
-
-Run a scenario to a local result file, then render it without re-execution:
-
-```console
-scenario --json run examples/cart.yaml --seed demo > result.json
-scenario trace-view /absolute/path/result.json --out /absolute/path/trace.html
-open /absolute/path/trace.html
-```
-
-The output is exactly one self-contained `scenario.trace-view/1` HTML file. It
-works offline through `file://`, requires no server, network, remote assets, or
-telemetry, and is read-only: source evidence is never changed. The viewer shows
-only facts present in the supported v1 result or `suite.run/1` artifact and never
-reruns a scenario or reconstructs missing runtime state.
+Use the [quickstart](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/quickstart.md#canonical-installed-package-workflows)
+as the single canonical workflow document. In particular, `scenario diff`
+compares execution artifacts, while `scenario diff-definition` structurally
+compares validated scenario definitions. `scenario impact` is a separate,
+conservative static may-impact analysis. `scenario trace-view` creates one
+self-contained offline HTML file from supported result/evidence.
 
 ## Documentation
 

@@ -1,188 +1,179 @@
-# Quickstart
+# Canonical installed-package workflows
 
-This guide runs the canonical cart history without optional dependencies. The
-installed `scenario` console entry point is available in this Phase 2-capable
-source tree; `--json` is a global option and therefore precedes the command.
+This is the canonical DSE user workflow document. Every ordinary command below
+uses the installed package and portable files created here; no source checkout,
+repository example, network service, API key, or maintainer-local path is needed.
+The global `--json` option precedes the command.
 
-## 1. Install
+The examples set `DSE_DEMO` to the physical absolute path of a temporary
+directory. Resolving the physical path avoids operating-system aliases (for
+example, a symlinked temporary-directory prefix) at filesystem trust boundaries.
 
-Install the package:
+## Install and create a scenario
 
 ```console
 python3 -m pip install deterministic-scenario-engine
+export DSE_DEMO="$(cd "${TMPDIR:-/tmp}" && pwd -P)/dse-demo"
+rm -rf "$DSE_DEMO"
+mkdir -p "$DSE_DEMO"
+cat > "$DSE_DEMO/scenario.yaml" <<'YAML'
+dsl_version: 1
+scenario: dse_demo
+clock: {start: '2026-01-01T00:00:00Z'}
+initial_state: {count: 0}
+steps:
+  - id: increment
+    write: {count: {$literal: 1}}
+    emit:
+      - type: count_changed
+        fields: {count: {$state: count}}
+    transition: null
+YAML
+cp "$DSE_DEMO/scenario.yaml" "$DSE_DEMO/scenario-before.yaml"
+sed 's/{$literal: 1}/{$literal: 2}/' "$DSE_DEMO/scenario.yaml" > "$DSE_DEMO/scenario-after.yaml"
+scenario --help
 ```
 
-To install from a source checkout instead, run from the repository root:
+Installing a checkout with `python3 -m pip install .` is
+**source-development-only**. Installed-package workflows are primary.
+
+## Validate
 
 ```console
-python3 -m venv /tmp/scenario-engine-quickstart
-/tmp/scenario-engine-quickstart/bin/python -m pip install .
+scenario validate "$DSE_DEMO/scenario.yaml"
 ```
 
-## 2. Read the DSL document
+Validation compiles the definition but does not execute it.
 
-[`examples/cart.yaml`](../examples/cart.yaml) creates a cart, adds one generated
-item, and checks out. It demonstrates typed decimal values, logical IDs,
-addressed integers, derivation, shallow writes, artifacts, and logical time.
-
-## 3. Parse, compile, execute, and replay
-
-Save this as `/tmp/scenario_engine_quickstart.py`, or run it in a Python session
-whose working directory is the repository root:
-
-```python
-from pathlib import Path
-
-from scenario_engine import (
-    ReproducibilityManifest,
-    ScenarioResult,
-    compile_document,
-    parse_yaml,
-    replay_scenario,
-    run_scenario,
-)
-
-yaml_text = Path("examples/cart.yaml").read_text(encoding="utf-8")
-
-# Parsing checks the YAML source contract and DSL schema.
-document = parse_yaml(yaml_text)
-
-# Compilation resolves expressions and the executable step graph.
-compiled = compile_document(document)
-
-# The root seed and nonnegative run index are explicit execution coordinates.
-result = run_scenario(compiled, root_seed="quickstart", run_index=0)
-assert isinstance(result, ScenarioResult)
-
-# Read current logical state through the supported result property.
-state = result.final_state
-assert state["checkout_complete"] is True
-assert len(state["cart_items"]) == 1
-
-# History contains committed steps; artifacts are declarations emitted by them.
-assert len(result.history.records) == 3
-assert [artifact.artifact_type for artifact in result.artifacts] == [
-    "cart_created",
-    "cart_item_added",
-    "cart_checked_out",
-]
-
-# Stable bytes include normalized state, history, artifacts, clock, and manifest.
-stable_bytes = result.to_json_bytes()
-assert stable_bytes == result.to_json_bytes()
-
-manifest = result.manifest
-assert isinstance(manifest, ReproducibilityManifest)
-
-# Replay re-parses and checks compatibility before running the recorded context.
-replayed = replay_scenario(yaml_text, manifest)
-assert replayed.to_json_bytes() == stable_bytes
-
-print(result.final_state)
-print(result.trace())
-print(stable_bytes.decode("utf-8"))
-```
-
-Run it with the isolated environment:
+## Run → replay
 
 ```console
-/tmp/scenario-engine-quickstart/bin/python /tmp/scenario_engine_quickstart.py
+scenario --json run "$DSE_DEMO/scenario.yaml" --seed demo-seed --run-index 0 --replay-out "$DSE_DEMO/replay.json" > "$DSE_DEMO/result.json"
+scenario --json replay "$DSE_DEMO/replay.json" --scenario "$DSE_DEMO/scenario.yaml" > "$DSE_DEMO/replayed-result.json"
+cmp "$DSE_DEMO/result.json" "$DSE_DEMO/replayed-result.json"
 ```
 
-`ScenarioResult.normalized()["state"]` is the stable serialized state field.
-The convenient Python property is `ScenarioResult.final_state`; there is no
-top-level `ScenarioResult.state` attribute in the frozen public API.
+The run's stdout is the normal `scenario.result/1` execution result. It is
+inspectable but is **not** automatically replayable. `--replay-out` separately
+writes the supported canonical `suite.run/1` replay artifact, and `scenario
+replay` consumes that artifact with the exact scenario (and the same `--inputs`
+if inputs were used). The destination must be absent.
 
-For inputs/resources, continue with [`examples/resources.yaml`](../examples/resources.yaml)
-and the [DSL reference](dsl-reference.md). For replay guarantees and limits, see
-[reproducibility](reproducibility.md) and [compatibility](compatibility.md).
-
-## 4. CLI run and replay path
-
-### Author-time scaffold, inspect, validate, then run
-
-The default scaffold provider is deterministic and fully offline; it requires no
-network access, API key, secret, or external model SDK. It accepts bounded
-structured labels rather than interpreting arbitrary prose:
-
-```console
-scenario scaffold checkout_draft --step create_cart --step checkout > /tmp/checkout-draft.yaml
-cat /tmp/checkout-draft.yaml
-scenario validate /tmp/checkout-draft.yaml
-scenario run /tmp/checkout-draft.yaml --seed reviewed-seed
-```
-
-`scaffold` produces proposed DSL 1 authoring material and applies the ordinary
-DSE parser/compiler validation path. The proposal remains an untrusted draft:
-inspect it, validate it explicitly, and freeze it through the user's normal
-review process before any later run. Scaffolding never executes a scenario,
-automatically accepts a draft, bypasses validation, or grants provider metadata
-runtime authority. `--json` emits bounded proposal metadata plus the DSL text;
-errors use the existing `scenario.error/1` envelope.
-
-Run these from a source checkout after installation. Every source is an explicit
-local file, and every execution supplies its deterministic seed coordinate.
-
-```console
-scenario validate examples/cart.yaml
-scenario --json hash examples/cart.yaml
-scenario --json run examples/cart.yaml --seed quickstart --run-index 0 --replay-out /tmp/dse-replay.json > /tmp/dse-result.json
-scenario --json replay /tmp/dse-replay.json --scenario examples/cart.yaml > /tmp/dse-replayed-result.json
-scenario --json inspect /tmp/dse-result.json --kind result
-scenario --json diff /tmp/dse-result.json /tmp/dse-result.json --kind result --mode first
-scenario --json matrix examples/cart.yaml --seed quickstart --dimensions '[{"name":"region","values":["us","eu"]}]' --describe
-```
-
-Routine invalid DSL passed to `validate` or `run` produces a bounded human
-diagnostic on stderr rather than a traceback. `DSL_PARSE_ERROR`,
-`DSL_SCHEMA_ERROR`, and `DSL_SEMANTIC_ERROR` are stable codes in the
-`DSL_SCHEMA` or `DSL_SEMANTIC` category. Applicable diagnostics include safe
-`expected` and `received` shape information and a `scenario.semantic-address/1`
-path such as `scenario:/step/checkout`; that address is semantic identity, not a
-YAML path. Exact explanatory prose and layout are presentation-level.
-
-The `--replay-out` destination must not already exist. It receives the supported,
-canonical `suite.run/1` replay artifact: a run-manifest envelope containing the
-scenario hash, engine/DSL compatibility coordinates, seed, run index, locale,
-reference clock, resource hashes, generator versions, and child reproducibility
- manifest. Replay requires the same scenario and, when the run used `--inputs`,
- the same explicit `--inputs`; hashes bind both to the recorded run and a mismatch
- fails closed. The replay result bytes equal the original deterministic result.
-
-Replay incompatibility exits with code 5 and writes one deterministic bounded
-diagnostic to stderr. Its stable `code` is one of
+Incompatible replay fails closed with exit 5. Stable rejection reasons include
 `ENGINE_VERSION_UNSUPPORTED`, `MANIFEST_VERSION_UNSUPPORTED`,
-`SCENARIO_MISMATCH`, or `REPLAY_DATA_INCOMPLETE`; migration availability is
-reported separately as `MIGRATION_AVAILABLE` or `MIGRATION_UNAVAILABLE` when it
-can be determined safely. The diagnostic includes applicable supported/received
-contract or scenario identity context and a stable `next_action`. These reasons
-only explain rejection: they never relax exact replay checks or migrate an
-artifact automatically. `--json` does not emit the future `scenario.error/1`
-envelope at this checkpoint; replay failures retain deterministic stderr.
+`SCENARIO_MISMATCH`, and `REPLAY_DATA_INCOMPLETE`; migration disposition may be
+`MIGRATION_AVAILABLE` or `MIGRATION_UNAVAILABLE`. These codes describe rejection
+and never weaken compatibility checks or trigger automatic migration.
 
-`/tmp/dse-result.json` is an inspectable execution/result artifact. It is not a
-replay artifact and must not be passed to `scenario replay`. The separately
-written `/tmp/dse-replay.json` is replayable under its exact recorded engine,
-manifest, DSL, scenario, generator/plugin, clock, and resource compatibility
-requirements. Inspectability alone does not imply replayability.
-
-The diff exits 0 because the artifacts are equal. A valid unequal diff exits 1.
-For batch-plan syntax, all flags, stdout/stderr rules and hard bounds, use the
-[Phase 2 public contract](phase2-public-contract.md#cli-contract).
-
-## 5. Phase 3 local evidence interchange
-
-The source tree also implements the unreleased Phase 3 commands. They are local,
-bounded, and non-executing when reading a bundle:
+## Inspect / explain
 
 ```console
-scenario verify /absolute/path/to/evidence-bundle
-scenario export /absolute/path/to/evidence-bundle /absolute/path/to/absent-copy
-scenario migrate /absolute/path/to/result.json /absolute/path/to/absent-migration --artifact-kind result --schema-version scenario.result/1 --product-version 1.0.0 --source-sha256 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef --dry-run
+scenario --json inspect "$DSE_DEMO/result.json" --kind result > "$DSE_DEMO/inspection.json"
+scenario --json explain "$DSE_DEMO/result.json" > "$DSE_DEMO/explanation.json"
 ```
 
-The migration hash is an example-shaped placeholder: supply the actual lowercase
-SHA-256 of the source. `--dry-run` emits the deterministic metadata plan and does
-not create the destination. For a complete local demonstrator using explicit
-ecommerce plugins, execution, replay, inspection, assertions, diff, and bundle
-export, use the [Phase 3 public contract](phase3-public-contract.md#ecommerce-reference-workflow).
+`inspect` summarizes normalized recorded evidence across its supported artifact
+kinds. `explain` is result-specific and presents available step and state-change
+evidence. Both are read-only, redact secret-prone values by default, do not
+re-execute, and label unavailable evidence rather than inventing it.
+
+## Execution artifact diff
+
+```console
+scenario --json run "$DSE_DEMO/scenario-after.yaml" --seed demo-seed > "$DSE_DEMO/result-after.json"
+scenario --json diff "$DSE_DEMO/result.json" "$DSE_DEMO/result-after.json" --kind result --mode complete > "$DSE_DEMO/execution-diff.json"
+test $? -eq 1
+```
+
+`scenario diff` compares recorded execution artifacts. Exit 0 means equal; a
+valid unequal comparison exits 1.
+
+## Scenario-definition structural diff
+
+```console
+scenario --json diff-definition "$DSE_DEMO/scenario-before.yaml" "$DSE_DEMO/scenario-after.yaml" > "$DSE_DEMO/definition-diff.json"
+```
+
+This validates and structurally compares two definitions; it is not a textual
+YAML diff. Formatting-only and mapping-key-order-only changes are ignored.
+Changes use `scenario.semantic-address/1`, and JSON uses
+`scenario.definition-diff/1`. Definition diff does not automatically perform
+impact analysis and does not prove behavioral equivalence.
+
+## Conservative impact analysis
+
+```console
+scenario --json impact "$DSE_DEMO/scenario-before.yaml" "$DSE_DEMO/scenario-after.yaml" > "$DSE_DEMO/impact.json"
+```
+
+The `scenario.impact/1` result is conservative static may-impact analysis over
+the structural change set. Classifications are `DIRECT`,
+`TRANSITIVE_POSSIBLE`, and `UNKNOWN`; **UNKNOWN does not mean unaffected**. No
+behavioral-equivalence or complete-impact proof is claimed. Amplification is the
+reduced fraction of distinct affected semantic-addressed entities over distinct
+eligible entities in the bounded union of the validated dependency graphs; it is
+not a probability.
+
+## Export → verify
+
+Create the installed package's deterministic reference evidence bundle through
+its stable public reference-pack API, then use only public CLI commands:
+
+```console
+python3 - <<'PY'
+from pathlib import Path
+import os
+from scenario_engine.reference_packs import export_ecommerce_evidence
+export_ecommerce_evidence(Path(os.environ['DSE_DEMO']) / 'evidence')
+PY
+scenario verify "$DSE_DEMO/evidence"
+scenario export "$DSE_DEMO/evidence" "$DSE_DEMO/evidence-copy"
+scenario verify "$DSE_DEMO/evidence-copy"
+```
+
+Evidence roots and the absent export destination are absolute local filesystem
+paths. Export validates and copies the existing evidence contract; it does not
+introduce another evidence format.
+
+## Evidence/result → static trace viewer
+
+```console
+scenario trace-view "$DSE_DEMO/result.json" --out "$DSE_DEMO/trace.html"
+open "$DSE_DEMO/trace.html"
+```
+
+The source and absent destination are absolute local filesystem paths. The
+command accepts `scenario.result/1` and `suite.run/1` and writes exactly one
+self-contained `scenario.trace-view/1` HTML file. It is offline, read-only, and
+uses no server, network, telemetry, CDN assets, or source mutation. Open the file
+locally. The viewer displays only evidence present in the input; it never reruns
+the scenario or reconstructs missing runtime state.
+
+## Scaffold → inspect → validate → review/freeze → later run
+
+```console
+scenario scaffold reviewed_draft --step prepare --step finish > "$DSE_DEMO/draft.yaml"
+cat "$DSE_DEMO/draft.yaml"
+scenario validate "$DSE_DEMO/draft.yaml"
+# Human review and freeze happen here.
+scenario --json run "$DSE_DEMO/draft.yaml" --seed reviewed-seed > "$DSE_DEMO/draft-result.json"
+```
+
+`scenario scaffold` uses the offline deterministic default provider. It requires
+no API key and no runtime LLM, does not advertise or contact an LLM provider,
+and never executes automatically. Its `scenario.scaffold/1` metadata has no
+runtime authority. Generated DSL remains an untrusted proposal until ordinary
+validation passes; inspect it and human-review/freeze it before explicitly
+running it later.
+
+## Human and machine diagnostics
+
+Default mode emits bounded actionable human diagnostics. Exact human prose and
+layout are presentation, not a stable automation interface. Put `--json` before
+the command to receive the `scenario.error/1` machine-readable error envelope on
+stderr. Automation should rely on `schema`, `code`, `category`, `exit_code`, and,
+when applicable, `semantic_path`.
+
+Commands that say **absolute local filesystem path** reject relative paths and
+remote or URI-like sources. Other source arguments are explicit local files (or
+stdin where their help permits it). No workflow above uses a remote URI.
