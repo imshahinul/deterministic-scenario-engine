@@ -6,6 +6,7 @@ from typing import Any, Mapping
 
 from scenario_engine.artifacts import GeneratedArtifact
 from scenario_engine.context import GenerationContext
+from scenario_engine.diagnostics import semantic_address
 from scenario_engine.expressions import (
     Add, Append, BooleanMany, BooleanNot, DerivedRef, Divide, Equal, Expression,
     GreaterThan, GreaterThanOrEqual, Length, LessThan, LessThanOrEqual, Literal,
@@ -147,7 +148,11 @@ def _validate_sequence(steps, path):
         expected = ids[index + 1] if index + 1 < len(ids) else None
         if step.transition is not None and step.transition not in known:
             raise DSLCompilationError(
-                f"{path}[{index}].transition: unknown node ID {step.transition}"
+                f"{path}[{index}].transition: unknown node ID {step.transition}",
+                semantic_path=semantic_address(("step", step.step_id)),
+                expected="existing step ID in this sequence", received="unknown step ID",
+                remediation="target a declared step in this sequence",
+                diagnostic_message="transition targets an unknown step ID",
             )
         if step.transition != expected:
             if expected is None:
@@ -156,7 +161,13 @@ def _validate_sequence(steps, path):
                 message = f"non-final step transition must be {expected}"
             else:
                 message = f"linear transition must target immediately following step {expected}"
-            raise DSLCompilationError(f"{path}[{index}].transition: {message}")
+            raise DSLCompilationError(
+                f"{path}[{index}].transition: {message}",
+                semantic_path=semantic_address(("step", step.step_id)),
+                expected="linear next-step transition or null at the final step",
+                received="different transition target",
+                remediation="use the immediately following step ID, or null for the final step",
+            )
 
 
 def _targets(step):

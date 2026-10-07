@@ -85,7 +85,7 @@ def test_module_invocation_validate_and_no_execution(scenario_file: Path, monkey
     assert payload["identity"] == direct_result().manifest.scenario_canonical_hash
     invalid = invoke("validate", "-", stdin=b"not: [valid")
     assert invalid.returncode == CLIExitCode.VALIDATION
-    assert invalid.stdout == b"" and b"DSLParseError" in invalid.stderr
+    assert invalid.stdout == b"" and b"DSL_PARSE_ERROR" in invalid.stderr
 
 
 def test_run_is_byte_stable_and_equals_direct_library(scenario_file: Path) -> None:

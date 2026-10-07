@@ -12,6 +12,7 @@ from yaml.events import AliasEvent, ScalarEvent
 from yaml.resolver import Resolver
 
 from scenario_engine.values import MISSING, normalize
+from scenario_engine.diagnostics import semantic_address
 
 from .errors import DSLParseError, DSLSchemaError, UnsupportedDSLVersionError
 from .models import ScenarioDocument, StepDocument
@@ -65,7 +66,10 @@ def _reject_ambiguous_yaml_constructs(text: str) -> None:
     except yaml.YAMLError as error:
         mark = getattr(error, "problem_mark", None)
         location = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
-        raise DSLParseError(f"YAML safe-load failed{location}") from None
+        raise DSLParseError(
+            f"YAML safe-load failed{location}", expected="valid DSL 1 YAML",
+            received="malformed YAML", remediation="correct the YAML syntax",
+        ) from None
 
 
 def _construct_strict_mapping(loader: _DSLLoader, node: yaml.MappingNode, deep: bool = False) -> dict[Any, Any]:
@@ -91,13 +95,47 @@ _DSLLoader.add_constructor(
 )
 
 
-def _fail(path: str, message: str) -> None:
-    raise DSLSchemaError(f"{path}: {message}")
+def _shape(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, int):
+        return "integer"
+    if isinstance(value, list):
+        return "array"
+    if isinstance(value, Mapping):
+        return "object"
+    return type(value).__name__
+
+
+def _fail(
+    path: str,
+    message: str,
+    *,
+    semantic_path: str | None = None,
+    expected: str | None = None,
+    received: str | None = None,
+    remediation: str | None = None,
+) -> None:
+    lowered = message.lower()
+    if expected is None and ("required" in lowered or "missing" in lowered):
+        expected, received = "required field", received or "missing"
+    elif expected is None and ("unknown" in lowered or "unsupported" in lowered):
+        expected, received = "supported DSL 1 value", received or "unsupported value"
+    elif expected is None:
+        expected, received = "valid DSL 1 value", received or "invalid value"
+    raise DSLSchemaError(
+        f"{path}: {message}", semantic_path=semantic_path, expected=expected,
+        received=received, remediation=remediation or "correct the indicated scenario declaration",
+    )
 
 
 def _mapping(value: Any, path: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
-        _fail(path, "expected mapping")
+        _fail(path, "expected mapping", expected="object", received=_shape(value))
     if not all(isinstance(key, str) for key in value):
         _fail(path, "mapping keys must be strings")
     return value
@@ -168,9 +206,12 @@ def _parse_datetime(value: Any, path: str) -> datetime:
     return result.astimezone(timezone.utc)
 
 
-def _symbol(value: Any, path: str) -> None:
+def _symbol(value: Any, path: str, *, semantic_path: str | None = None) -> None:
     if not isinstance(value, str) or not value:
-        _fail(path, "expected non-empty top-level symbolic name")
+        _fail(
+            path, "expected non-empty top-level symbolic name", semantic_path=semantic_path,
+            expected="non-empty string", received=_shape(value),
+        )
 
 
 def _validate_expression(node: Any, path: str, *, emission: bool = False,
@@ -429,6 +470,7 @@ def _parse_node(raw: Any, path: str, seen: set[str]) -> StepDocument:
         _fail(path, "id and transition are required")
     step_id = node["id"]
     _symbol(step_id, path + ".id")
+    step_path = semantic_address(("step", step_id))
     if step_id in seen:
         _fail(path + ".id", f"duplicate step ID {step_id} (global node ID)")
     seen.add(step_id)
@@ -438,7 +480,7 @@ def _parse_node(raw: Any, path: str, seen: set[str]) -> StepDocument:
         _fail(path, "node must be exactly one executable, call, branch, or repeat node")
     transition = node["transition"]
     if transition is not None:
-        _symbol(transition, path + ".transition")
+        _symbol(transition, path + ".transition", semantic_path=step_path)
     if controls:
         kind = controls[0]
         body = _mapping(node[kind], path + "." + kind)
@@ -519,12 +561,19 @@ def parse_yaml(text: str) -> ScenarioDocument:
     except yaml.YAMLError as error:
         mark = getattr(error, "problem_mark", None)
         location = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
-        raise DSLParseError(f"YAML safe-load failed{location}") from None
+        raise DSLParseError(
+            f"YAML safe-load failed{location}", expected="valid DSL 1 YAML",
+            received="malformed YAML", remediation="correct the YAML syntax",
+        ) from None
     root = _mapping(loaded, "$")
     _only_keys(root, _TOP_KEYS, "$")
     missing = sorted(_REQUIRED_TOP_KEYS - set(root))
     if missing:
-        _fail("$", "missing required key(s): " + ", ".join(missing))
+        _fail(
+            "$", "missing required key(s): " + ", ".join(missing),
+            expected="required field(s): " + ", ".join(missing), received="missing",
+            remediation="add the required top-level field(s)",
+        )
     version = root["dsl_version"]
     if isinstance(version, bool) or not isinstance(version, int) or version != 1:
         raise UnsupportedDSLVersionError("$.dsl_version: supported version is integer 1")
@@ -553,7 +602,11 @@ def parse_yaml(text: str) -> ScenarioDocument:
         _fail("$.constraints", "declared constraint list must be non-empty")
     constraints = _parse_constraints(root.get("constraints", []))
     steps_raw = root["steps"]
-    if not isinstance(steps_raw, list) or not steps_raw: _fail("$.steps", "expected non-empty ordered list")
+    if not isinstance(steps_raw, list) or not steps_raw:
+        _fail(
+            "$.steps", "expected non-empty ordered list", expected="non-empty array",
+            received=_shape(steps_raw),
+        )
     seen: set[str] = set()
     steps = [_parse_node(raw, f"$.steps[{index}]", seen) for index, raw in enumerate(steps_raw)]
     subflows_raw = _mapping(root.get("subflows", {}), "$.subflows")

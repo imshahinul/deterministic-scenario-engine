@@ -112,6 +112,14 @@ scenario --json diff /tmp/dse-result.json /tmp/dse-result.json --kind result --m
 scenario --json matrix examples/cart.yaml --seed quickstart --dimensions '[{"name":"region","values":["us","eu"]}]' --describe
 ```
 
+Routine invalid DSL passed to `validate` or `run` produces a bounded human
+diagnostic on stderr rather than a traceback. `DSL_PARSE_ERROR`,
+`DSL_SCHEMA_ERROR`, and `DSL_SEMANTIC_ERROR` are stable codes in the
+`DSL_SCHEMA` or `DSL_SEMANTIC` category. Applicable diagnostics include safe
+`expected` and `received` shape information and a `scenario.semantic-address/1`
+path such as `scenario:/step/checkout`; that address is semantic identity, not a
+YAML path. Exact explanatory prose and layout are presentation-level.
+
 The `--replay-out` destination must not already exist. It receives the supported,
 canonical `suite.run/1` replay artifact: a run-manifest envelope containing the
 scenario hash, engine/DSL compatibility coordinates, seed, run index, locale,

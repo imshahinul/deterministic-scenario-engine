@@ -26,6 +26,7 @@ from scenario_engine.diff import (
     DEFAULT_MAX_DIFF_RECORDS, DiffBoundError, DiffError, canonical_diff_bytes,
     render_diff_text, semantic_diff,
 )
+from scenario_engine.diagnostics import HumanDiagnostic, render_human_diagnostic
 from scenario_engine.dsl import (
     DSLError, compile_document, parse_yaml, replay_scenario, run_scenario,
 )
@@ -113,6 +114,10 @@ def _parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
     validate = commands.add_parser("validate", help="validate a scenario without execution")
+    validate.description = (
+        "Validate a scenario without execution. Routine authoring failures report a stable "
+        "diagnostic code and, when available, a scenario.semantic-address/1 path."
+    )
     _source(validate)
 
     run = commands.add_parser("run", help="execute a scenario")
@@ -786,6 +791,16 @@ def _diagnostic(message: str) -> None:
     sys.stderr.write(f"scenario: error: {safe}\n")
 
 
+def _human_diagnostic(error: DSLError) -> None:
+    diagnostic = getattr(error, "human_diagnostic", None)
+    if not isinstance(diagnostic, HumanDiagnostic):
+        diagnostic = HumanDiagnostic(
+            "DSL_SEMANTIC_ERROR", "DSL_SEMANTIC", "scenario validation failed",
+            remediation="correct the scenario declaration",
+        )
+    sys.stderr.write(render_human_diagnostic(diagnostic))
+
+
 def _replay_diagnostic(error: ReplayCompatibilityError) -> None:
     fields = [f"code={error.reason_code}", f"category={error.category}"]
     if error.artifact_contract is not None:
@@ -920,6 +935,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         reason = _path_reason(error)
         if reason is not None:
             _path_diagnostic(reason, getattr(locals().get("args"), "command", "cli"))
+            return int(code)
+        if isinstance(error, DSLError):
+            _human_diagnostic(error)
             return int(code)
         if code is CLIExitCode.INTERNAL:
             message = "unexpected internal error"
