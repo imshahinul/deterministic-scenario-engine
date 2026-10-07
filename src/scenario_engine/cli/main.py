@@ -50,6 +50,9 @@ from scenario_engine.inspection import (
 from scenario_engine.manifest import (
     ReplayCompatibilityError, ReplayCompatibilityReason, ReproducibilityManifest,
 )
+from scenario_engine.scaffolding import (
+    DEFAULT_SCAFFOLD_PROVIDER, ScaffoldError, ScaffoldRequest, scaffold_scenario,
+)
 from scenario_engine.matrix import (
     MatrixDimension, MatrixError, MatrixPlan, execute_matrix,
     execute_matrix_case, expand_matrix,
@@ -121,6 +124,27 @@ def _parser() -> argparse.ArgumentParser:
         "diagnostic code and, when available, a scenario.semantic-address/1 path."
     )
     _source(validate)
+
+    scaffold = commands.add_parser(
+        "scaffold", help="propose an offline authoring draft without execution",
+        description=(
+            "Propose deterministic DSL 1 authoring material. The command validates but never "
+            "executes the draft; inspect and freeze it before a later explicit run."
+        ),
+    )
+    scaffold.add_argument("scenario_id", help="bounded scenario identifier")
+    scaffold.add_argument(
+        "--step", dest="step_ids", action="append", required=True,
+        help="ordered step identifier; repeat for additional steps",
+    )
+    scaffold.add_argument(
+        "--clock-start", default="2026-01-01T00:00:00Z",
+        help="explicit ISO-8601 reference clock start",
+    )
+    scaffold.add_argument(
+        "--provider", default=DEFAULT_SCAFFOLD_PROVIDER,
+        help=f"authoring provider (default: {DEFAULT_SCAFFOLD_PROVIDER}; offline)",
+    )
 
     run = commands.add_parser("run", help="execute a scenario")
     _source(run)
@@ -354,6 +378,14 @@ def _validate(args: argparse.Namespace) -> tuple[bytes, bytes]:
     return _canonical({"command": "validate", "identity": identity, "valid": True}), (
         f"valid {'composed suite' if composed else 'scenario'} {identity}\n".encode("utf-8")
     )
+
+
+def _scaffold(args: argparse.Namespace) -> tuple[bytes, bytes]:
+    result = scaffold_scenario(
+        ScaffoldRequest(args.scenario_id, tuple(args.step_ids), args.clock_start),
+        provider=args.provider,
+    )
+    return _canonical(result.to_jsonable()), result.proposed_dsl.encode("utf-8")
 
 
 def _run(args: argparse.Namespace) -> tuple[bytes, bytes]:
@@ -803,6 +835,16 @@ def _dsl_diagnostic(error: DSLError) -> HumanDiagnostic:
     return diagnostic
 
 
+def _scaffold_diagnostic(error: ScaffoldError) -> HumanDiagnostic:
+    diagnostic = getattr(error, "human_diagnostic", None)
+    if isinstance(diagnostic, HumanDiagnostic):
+        return diagnostic
+    return HumanDiagnostic(
+        "SCAFFOLD_PROVIDER_FAILED", "SCAFFOLD_AUTHORING", "scaffold authoring failed",
+        remediation="REVIEW_SCAFFOLD_REQUEST",
+    )
+
+
 def _replay_diagnostic(error: ReplayCompatibilityError) -> HumanDiagnostic:
     details: dict[str, str] = {}
     if error.artifact_contract is not None:
@@ -928,6 +970,8 @@ def _mapped(error: Exception) -> CLIExitCode:
         return CLIExitCode.SECURITY_OR_BOUND
     if isinstance(error, (DSLError, CompositionError, ArtifactReadError, SuiteSerializationError)):
         return CLIExitCode.VALIDATION
+    if isinstance(error, ScaffoldError):
+        return CLIExitCode.VALIDATION
     if isinstance(error, (MatrixError, BatchError, InspectionError, DiffError)):
         return CLIExitCode.VALIDATION
     if isinstance(error, ScenarioEngineError):
@@ -944,7 +988,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = _parser().parse_args(requested)
         handler = {
-            "validate": _validate, "run": _run, "replay": _replay, "hash": _hash,
+            "validate": _validate, "scaffold": _scaffold, "run": _run, "replay": _replay, "hash": _hash,
             "inspect": _inspect, "explain": _explain, "diff": _diff,
             "matrix": _matrix, "batch": _batch, "export": _export,
             "verify": _verify, "migrate": _migrate,
@@ -991,6 +1035,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             return int(code)
         if isinstance(error, DSLError):
             diagnostic = _dsl_diagnostic(error)
+            if json_mode:
+                _emit_machine(diagnostic, code)
+            else:
+                sys.stderr.write(render_human_diagnostic(diagnostic))
+            return int(code)
+        if isinstance(error, ScaffoldError):
+            diagnostic = _scaffold_diagnostic(error)
             if json_mode:
                 _emit_machine(diagnostic, code)
             else:

@@ -372,6 +372,17 @@ Provider prompts, responses, credentials, network behavior, cost, availability,
 and nondeterminism are authoring observations, not DSE runtime semantics.
 Autonomous correction/execution and implicit network providers are excluded.
 
+Phase 4.6 realizes this boundary as `scenario.scaffold/1`. Its default
+`deterministic-template` provider accepts only bounded scenario/step identifiers
+and an explicit clock, emits byte-stable DSL 1, and performs no network or model
+calls. The orchestration layer—not the provider—passes every proposal through the
+ordinary DSL parser/compiler. `scenario scaffold` writes the proposed draft to
+stdout and never invokes runtime execution; provider identity/version appear only
+as non-runtime JSON authoring metadata. Failures use category
+`SCAFFOLD_AUTHORING` and codes `SCAFFOLD_REQUEST_INVALID`,
+`SCAFFOLD_PROVIDER_NOT_FOUND`, `SCAFFOLD_PROVIDER_FAILED`, or
+`SCAFFOLD_OUTPUT_INVALID` through `scenario.error/1` in JSON mode.
+
 ## 11. Scenario-definition structural diff
 
 This conditional candidate is a semantic definition diff, not textual YAML diff

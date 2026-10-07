@@ -99,6 +99,27 @@ and the [DSL reference](dsl-reference.md). For replay guarantees and limits, see
 
 ## 4. CLI run and replay path
 
+### Author-time scaffold, inspect, validate, then run
+
+The default scaffold provider is deterministic and fully offline; it requires no
+network access, API key, secret, or external model SDK. It accepts bounded
+structured labels rather than interpreting arbitrary prose:
+
+```console
+scenario scaffold checkout_draft --step create_cart --step checkout > /tmp/checkout-draft.yaml
+cat /tmp/checkout-draft.yaml
+scenario validate /tmp/checkout-draft.yaml
+scenario run /tmp/checkout-draft.yaml --seed reviewed-seed
+```
+
+`scaffold` produces proposed DSL 1 authoring material and applies the ordinary
+DSE parser/compiler validation path. The proposal remains an untrusted draft:
+inspect it, validate it explicitly, and freeze it through the user's normal
+review process before any later run. Scaffolding never executes a scenario,
+automatically accepts a draft, bypasses validation, or grants provider metadata
+runtime authority. `--json` emits bounded proposal metadata plus the DSL text;
+errors use the existing `scenario.error/1` envelope.
+
 Run these from a source checkout after installation. Every source is an explicit
 local file, and every execution supplies its deterministic seed coordinate.
 
