@@ -448,6 +448,34 @@ labelled accordingly. The independently versioned report candidate is
 `scenario.impact/1` and records graph/rule version, limits, completeness, input
 hashes, classifications, rational amplification, and stable reasons.
 
+Phase 4.8 implements that frozen identity through `scenario impact BEFORE
+TARGET`. It consumes `scenario.definition-diff/1`; it does not duplicate or
+reinterpret structural change kinds. ADDED changes use the target graph,
+REMOVED changes use the before graph, and CHANGED changes use their bounded
+union so removal never erases dependency evidence. The denominator is the
+count of distinct semantic-addressed entities in that union. The numerator is
+the count of distinct entities classified DIRECT, TRANSITIVE_POSSIBLE, or
+UNKNOWN for the complete structural change set. The reduced integer fraction
+is authoritative; it is change amplification, never probability or behavioral
+distance. Analysis is static only and traversal is bounded with visited-state
+tracking.
+
+```text
+IMPACT_CONTRACT=scenario.impact/1
+IMPACT_USES_DEFINITION_DIFF_CONTRACT=YES
+DEPENDENCY_GRAPH_USES_SEMANTIC_ADDRESSES=YES
+UNKNOWN_PRESERVED_EXPLICITLY=YES
+STATIC_ANALYSIS_ONLY=YES
+RUNTIME_EXECUTION_REQUIRED_FOR_IMPACT=NO
+CYCLE_HANDLING_BOUNDED=YES
+HEURISTIC_RENAME_DETECTION=NO
+BEHAVIORAL_EQUIVALENCE_CLAIMED=NO
+COMPLETE_IMPACT_PROOF_CLAIMED=NO
+UNKNOWN_MEANS_UNAFFECTED=NO
+CHANGE_AMPLIFICATION_NUMERATOR_DEFINITION=distinct entities classified DIRECT, TRANSITIVE_POSSIBLE, or UNKNOWN for the structural change set
+CHANGE_AMPLIFICATION_DENOMINATOR_DEFINITION=distinct semantic-addressed entities in the bounded union of the validated before and target dependency graphs
+```
+
 Default architectural ceilings are 100,000 nodes, 500,000 edges, graph depth
 256, and 16 MiB canonical report bytes. Exceeding a ceiling produces bounded
 partial/unknown output or a bound error according to the eventual explicit API;

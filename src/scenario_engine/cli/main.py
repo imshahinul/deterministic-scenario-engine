@@ -48,6 +48,7 @@ from scenario_engine.inspection import (
     InspectionBoundError, InspectionError, canonical_explanation_bytes,
     canonical_inspection_bytes, explain_result, inspect,
 )
+from scenario_engine.impact import analyze_impact, render_impact_analysis
 from scenario_engine.manifest import (
     ReplayCompatibilityError, ReplayCompatibilityReason, ReproducibilityManifest,
 )
@@ -195,6 +196,14 @@ def _parser() -> argparse.ArgumentParser:
     )
     definition_diff.add_argument("left", help="first local scenario YAML path or -")
     definition_diff.add_argument("right", help="second local scenario YAML path or -")
+
+    impact = commands.add_parser(
+        "impact", help="conservatively analyze potential effects of definition changes",
+        description=("Statically analyze two validated scenario definitions using their authoritative "
+                     "structural diff. Reports may-impact only. UNKNOWN != UNAFFECTED."),
+    )
+    impact.add_argument("left", help="before local scenario YAML path or -")
+    impact.add_argument("right", help="target local scenario YAML path or -")
 
     matrix = commands.add_parser("matrix", help="expand or execute a deterministic matrix")
     _source(matrix)
@@ -664,6 +673,14 @@ def _diff_definition(args: argparse.Namespace) -> tuple[bytes, bytes]:
     return document.to_json_bytes(), (render_definition_diff(document) + "\n").encode("utf-8")
 
 
+def _impact(args: argparse.Namespace) -> tuple[bytes, bytes]:
+    used = [False]
+    left = parse_yaml(_text(_read(args.left, stdin_used=used), "before scenario"))
+    right = parse_yaml(_text(_read(args.right, stdin_used=used), "target scenario"))
+    document = analyze_impact(left, right)
+    return document.to_json_bytes(), (render_impact_analysis(document) + "\n").encode("utf-8")
+
+
 def _matrix_plan(args: argparse.Namespace) -> MatrixPlan:
     target, composed = _load_target(args.source, args.root)
     raw_dimensions = _json_argument(args.dimensions, list, ())
@@ -1009,7 +1026,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         handler = {
             "validate": _validate, "scaffold": _scaffold, "run": _run, "replay": _replay, "hash": _hash,
             "inspect": _inspect, "explain": _explain, "diff": _diff,
-            "diff-definition": _diff_definition,
+            "diff-definition": _diff_definition, "impact": _impact,
             "matrix": _matrix, "batch": _batch, "export": _export,
             "verify": _verify, "migrate": _migrate,
         }[args.command]
