@@ -11,9 +11,22 @@ from urllib.parse import quote
 
 
 MAX_DIAGNOSTIC_FIELD_CHARS = 512
+MAX_DIAGNOSTIC_DETAIL_KEY_CHARS = 128
+MAX_DIAGNOSTIC_DETAILS = 1_000
 MAX_SEMANTIC_ADDRESS_BYTES = 2048
+MAX_SEMANTIC_ADDRESS_DEPTH = 32
 ERROR_ENVELOPE_SCHEMA = "scenario.error/1"
 _SPACE = re.compile(r"\s+")
+_EXTENSION_KIND = re.compile(r"x-[a-z0-9-]+\Z")
+_STANDARD_KINDS = frozenset({
+    "constraint", "derive", "emit", "fault", "generator", "invariant", "oracle",
+    "resource", "state", "step", "transition", "write",
+})
+_RESERVED_KINDS = frozenset({"actor", "lane"})
+_SECRET_KEY_PARTS = frozenset({
+    "access_key", "api_key", "authorization", "passwd", "password", "private_key",
+    "secret", "token",
+})
 
 
 def bounded_text(value: object, *, limit: int = MAX_DIAGNOSTIC_FIELD_CHARS) -> str:
@@ -24,12 +37,23 @@ def bounded_text(value: object, *, limit: int = MAX_DIAGNOSTIC_FIELD_CHARS) -> s
 
 def semantic_address(*components: tuple[str, str]) -> str | None:
     """Produce a bounded canonical scenario.semantic-address/1 address."""
+    if not components or len(components) > MAX_SEMANTIC_ADDRESS_DEPTH:
+        return None
     encoded: list[str] = []
-    for kind, identifier in components:
-        if not kind or not identifier or identifier in {".", ".."}:
+    for component in components:
+        if not isinstance(component, tuple) or len(component) != 2:
             return None
-        normalized = unicodedata.normalize("NFC", identifier)
-        token = quote(normalized, safe="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+        kind, identifier = component
+        if (not isinstance(kind, str) or not isinstance(identifier, str)
+                or kind in _RESERVED_KINDS
+                or (kind not in _STANDARD_KINDS and _EXTENSION_KIND.fullmatch(kind) is None)
+                or not identifier or identifier in {".", ".."}):
+            return None
+        try:
+            normalized = unicodedata.normalize("NFC", identifier)
+            token = quote(normalized, safe="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+        except (TypeError, UnicodeError):
+            return None
         encoded.extend((kind, token))
     result = "scenario:/" + "/".join(encoded)
     return result if len(result.encode("utf-8")) <= MAX_SEMANTIC_ADDRESS_BYTES else None
@@ -84,10 +108,17 @@ def error_envelope(diagnostic: HumanDiagnostic, exit_code: int) -> dict[str, obj
     if diagnostic.remediation is not None:
         value["remediation"] = bounded_text(diagnostic.remediation)
     if diagnostic.details:
-        value["details"] = {
-            bounded_text(key): item if isinstance(item, (bool, int)) else bounded_text(item)
-            for key, item in sorted(diagnostic.details.items())
-        }
+        details: dict[str, str | int | bool] = {}
+        ordered = sorted(diagnostic.details.items(), key=lambda pair: bounded_text(pair[0]))
+        for key, item in ordered[:MAX_DIAGNOSTIC_DETAILS]:
+            safe_key = bounded_text(key, limit=MAX_DIAGNOSTIC_DETAIL_KEY_CHARS)
+            folded = safe_key.casefold()
+            secret = any(part == folded or part in re.split(r"[^a-z0-9]+", folded)
+                         for part in _SECRET_KEY_PARTS)
+            details[safe_key] = "[REDACTED]" if secret else (
+                item if isinstance(item, (bool, int)) else bounded_text(item)
+            )
+        value["details"] = details
     return value
 
 

@@ -17,6 +17,8 @@ SCAFFOLD_CONTRACT = "scenario.scaffold/1"
 DEFAULT_SCAFFOLD_PROVIDER = "deterministic-template"
 MAX_SCAFFOLD_STEPS = 32
 MAX_SCAFFOLD_IDENTIFIER_CHARS = 128
+MAX_SCAFFOLD_CLOCK_CHARS = 128
+MAX_SCAFFOLD_OUTPUT_BYTES = 1 * 1024 * 1024
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
 
@@ -73,10 +75,11 @@ class ScaffoldRequest:
                 "scaffold step IDs must be unique", expected="unique step IDs",
                 received="duplicate step ID", remediation="SUPPLY_UNIQUE_STEP_IDS",
             )
-        if not isinstance(self.reference_clock_start, str) or not self.reference_clock_start:
+        if (not isinstance(self.reference_clock_start, str) or not self.reference_clock_start
+                or len(self.reference_clock_start) > MAX_SCAFFOLD_CLOCK_CHARS):
             raise ScaffoldRequestInvalidError(
-                "reference clock start must be a non-empty ISO-8601 string",
-                expected="non-empty ISO-8601 string", received="invalid clock label",
+                "reference clock start must be a bounded ISO-8601 string",
+                expected="1..128 character ISO-8601 string", received="invalid clock label",
                 remediation="SUPPLY_VALID_REFERENCE_CLOCK_START",
             )
 
@@ -178,15 +181,30 @@ def scaffold_scenario(request: ScaffoldRequest, *, provider: str = DEFAULT_SCAFF
             "scaffold provider failed without producing a proposal",
             remediation="RETRY_OR_SELECT_ANOTHER_SCAFFOLD_PROVIDER",
         ) from None
-    if (proposal.provider != selected.provider_id
-            or proposal.provider_version != selected.provider_version
-            or not isinstance(proposal.proposed_dsl, str)):
+    try:
+        proposed_dsl = proposal.proposed_dsl
+        proposal_provider = proposal.provider
+        proposal_version = proposal.provider_version
+        selected_provider = selected.provider_id
+        selected_version = selected.provider_version
+        metadata_valid = all(
+            isinstance(item, str) and 0 < len(item) <= MAX_SCAFFOLD_IDENTIFIER_CHARS
+            and _IDENTIFIER.fullmatch(item) is not None
+            for item in (proposal_provider, proposal_version, selected_provider, selected_version)
+        )
+        output_size = len(proposed_dsl.encode("utf-8")) if isinstance(proposed_dsl, str) else -1
+    except (AttributeError, TypeError, UnicodeError):
+        metadata_valid = False
+        output_size = -1
+    if (not metadata_valid or proposal_provider != selected_provider
+            or proposal_version != selected_version or not isinstance(proposed_dsl, str)
+            or output_size > MAX_SCAFFOLD_OUTPUT_BYTES):
         raise ScaffoldProviderFailedError(
             "scaffold provider returned an invalid bounded result",
             remediation="REPAIR_OR_SELECT_ANOTHER_SCAFFOLD_PROVIDER",
         )
     try:
-        compile_document(parse_yaml(proposal.proposed_dsl))
+        compile_document(parse_yaml(proposed_dsl))
     except DSLError:
         raise ScaffoldOutputInvalidError(
             "scaffold provider output failed ordinary DSE validation",
@@ -194,7 +212,7 @@ def scaffold_scenario(request: ScaffoldRequest, *, provider: str = DEFAULT_SCAFF
             remediation="REVIEW_PROVIDER_OUTPUT_OR_SELECT_ANOTHER_PROVIDER",
         ) from None
     return ScaffoldResult(
-        proposal.proposed_dsl, proposal.provider, proposal.provider_version, True,
+        proposed_dsl, proposal_provider, proposal_version, True,
     )
 
 
