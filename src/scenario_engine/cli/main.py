@@ -65,6 +65,9 @@ from scenario_engine.suite import (
     UnsupportedReplayContractError, canonical_suite_bytes, parse_suite_bytes,
     publish_suite_bytes, read_v1_manifest_bytes, read_v1_result_bytes,
 )
+from scenario_engine.trace_view import (
+    TRACE_VIEW_MAX_INPUT_BYTES, TraceViewError, render_trace_view,
+)
 from scenario_engine.values import normalize
 
 
@@ -166,6 +169,14 @@ def _parser() -> argparse.ArgumentParser:
     replay.add_argument("source", help="local suite.run/1 replay artifact path or - for stdin")
     replay.add_argument("--scenario", required=True, help="explicit local scenario YAML path")
     replay.add_argument("--inputs", help="bounded JSON object")
+
+    trace_view = commands.add_parser(
+        "trace-view", help="render a self-contained offline HTML trace view",
+        description=("Render one supported local result or suite.run/1 artifact as one read-only "
+                     "HTML file. No server, network, telemetry, or source mutation is used."),
+    )
+    trace_view.add_argument("source", help="absolute local result or suite.run/1 JSON path")
+    trace_view.add_argument("--out", required=True, help="absent absolute local HTML output path")
 
     hash_command = commands.add_parser("hash", help="print semantic scenario identity")
     _source(hash_command)
@@ -518,6 +529,49 @@ def _replay(args: argparse.Namespace) -> tuple[bytes, bytes]:
     result = replay_scenario(scenario, manifest, inputs=inputs)
     data = result.to_json_bytes()
     return data, data
+
+
+def _trace_view(args: argparse.Namespace) -> tuple[bytes, bytes]:
+    source = _require_absolute_local(args.source, "trace-view source")
+    destination = _require_absolute_local(args.out, "trace-view destination")
+    try:
+        data = _read(str(source), limit=TRACE_VIEW_MAX_INPUT_BYTES)
+    except _CLIError as error:
+        if error.code is CLIExitCode.SECURITY_OR_BOUND and str(error).startswith("input exceeds"):
+            raise TraceViewError("TRACE_INPUT_TOO_LARGE", "trace-view input exceeds its byte bound") from None
+        raise
+    try:
+        raw = json.loads(_text(data), object_pairs_hook=_unique_object, parse_constant=_reject_constant)
+    except (json.JSONDecodeError, ValueError):
+        raise TraceViewError("TRACE_INPUT_UNSUPPORTED", "trace-view input must be strict supported JSON") from None
+    artifact: Any
+    if isinstance(raw, Mapping) and raw.get("$model") == "RunManifestEnvelope":
+        try:
+            artifact = parse_suite_bytes(data)
+        except SuiteSerializationError:
+            raise TraceViewError("TRACE_INPUT_UNSUPPORTED", "suite.run/1 trace input is invalid") from None
+        if not isinstance(artifact, RunManifestEnvelope):
+            raise TraceViewError("TRACE_INPUT_UNSUPPORTED", "suite artifact is not suite.run/1")
+    else:
+        try:
+            artifact = read_v1_result_bytes(data)
+        except (ArtifactReadError, SuiteSerializationError):
+            raise TraceViewError("TRACE_INPUT_UNSUPPORTED", "artifact is not a supported v1 result") from None
+    rendered = render_trace_view(artifact)
+    try:
+        publish_suite_bytes(rendered, destination)
+    except FileExistsError:
+        raise _CLIError("trace-view output path must not already exist", CLIExitCode.IO,
+                        path_reason=PathReason.DESTINATION_ALREADY_EXISTS) from None
+    except FileNotFoundError:
+        raise _CLIError("trace-view output parent directory does not exist", CLIExitCode.IO,
+                        path_reason=PathReason.DESTINATION_PARENT_MISSING) from None
+    except OSError:
+        destination.unlink(missing_ok=True)
+        raise _CLIError("unable to publish trace-view output", CLIExitCode.IO,
+                        path_reason=PathReason.DESTINATION_NOT_WRITABLE) from None
+    summary = _canonical({"contract": "scenario.trace-view/1", "output": "html", "written": True})
+    return summary, f"wrote self-contained offline trace view ({len(rendered)} bytes)\n".encode()
 
 
 def _require_supported_replay_schema(artifact: bytes) -> bool:
@@ -990,6 +1044,8 @@ def _emit_machine(diagnostic: HumanDiagnostic, code: CLIExitCode) -> None:
 
 
 def _mapped(error: Exception) -> CLIExitCode:
+    if isinstance(error, TraceViewError):
+        return CLIExitCode.SECURITY_OR_BOUND if error.code in {"TRACE_INPUT_TOO_LARGE", "TRACE_OUTPUT_TOO_LARGE"} else CLIExitCode.VALIDATION
     if isinstance(error, (UnsupportedReplayContractError, ReplayCompatibilityError)):
         return CLIExitCode.REPLAY_COMPATIBILITY
     if isinstance(error, (CompositionBoundError, ArtifactBoundError, InspectionBoundError, DiffBoundError)):
@@ -1024,7 +1080,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = _parser().parse_args(requested)
         handler = {
-            "validate": _validate, "scaffold": _scaffold, "run": _run, "replay": _replay, "hash": _hash,
+            "validate": _validate, "scaffold": _scaffold, "run": _run, "replay": _replay,
+            "trace-view": _trace_view, "hash": _hash,
             "inspect": _inspect, "explain": _explain, "diff": _diff,
             "diff-definition": _diff_definition, "impact": _impact,
             "matrix": _matrix, "batch": _batch, "export": _export,
@@ -1079,6 +1136,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             return int(code)
         if isinstance(error, ScaffoldError):
             diagnostic = _scaffold_diagnostic(error)
+            if json_mode:
+                _emit_machine(diagnostic, code)
+            else:
+                sys.stderr.write(render_human_diagnostic(diagnostic))
+            return int(code)
+        if isinstance(error, TraceViewError):
+            diagnostic = HumanDiagnostic(
+                error.code, error.category, bounded_text(str(error)),
+                remediation="SUPPLY_SUPPORTED_BOUNDED_LOCAL_ARTIFACT",
+            )
             if json_mode:
                 _emit_machine(diagnostic, code)
             else:

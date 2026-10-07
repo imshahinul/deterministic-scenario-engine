@@ -515,6 +515,29 @@ events, depth 64, 1 MiB per displayed value before deterministic truncation, and
 publication when the output ceiling cannot be met. Output is atomically written
 to an explicit absent local destination.
 
+Phase 4.9 implements the narrower public command `scenario trace-view EVIDENCE
+--out VIEW.html` and the independently versioned `scenario.trace-view/1`
+renderer contract. Supported inputs are canonical v1 scenario results and
+`suite.run/1`; a run manifest displays only its recorded identity, versions,
+seed, provenance, and hashes because it has no authoritative step timeline.
+The implementation limits input to 16 MiB and output to 128 MiB while retaining
+the architectural event, depth, and displayed-value ceilings. It atomically
+creates exactly one absent local HTML file. Opening that file directly is
+sufficient: it is read-only, offline, requires no server, has no telemetry or
+external dependency, and never mutates or executes source evidence. Embedded
+bounded evidence is HTML-escaped data; evidence cannot create markup or script.
+
+```text
+TRACE_VIEWER_CONTRACT=scenario.trace-view/1
+TRACE_VIEWER_MAX_INPUT_BYTES=16777216
+TRACE_VIEWER_MAX_OUTPUT_BYTES=134217728
+TRACE_VIEWER_SINGLE_FILE=YES
+TRACE_VIEWER_NETWORK_DEPENDENCIES=0
+VIEWER_RECONSTRUCTS_RUNTIME_STATE=NO
+FUTURE_ACTOR_LANE_PRESENTATION_RESERVED=YES
+ACTOR_LANE_EXECUTION_IMPLEMENTED=NO
+```
+
 ```text
 NETWORK_REQUIRED=NO
 SERVER_REQUIRED=NO

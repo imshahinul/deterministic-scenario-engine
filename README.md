@@ -36,7 +36,8 @@ make expected behavior explicit.
 - immutable ordered batch plans and worker-independent results
 - structured, redacted inspect/explain evidence and typed RFC 6901 semantic diff
 - validated scenario-definition structural diff with canonical semantic addresses
-- twelve-command `scenario` CLI for local and CI workflows, including bounded
+- self-contained, deterministic offline HTML trace views of local result evidence
+- `scenario` CLI for local and CI workflows, including bounded
   local evidence export, verification, and lossless migration
 - explicit immutable Domain Pack registries and pure Oracle Assertions
 - canonical evidence bundles, ordered JSON/JSONL export, compatibility reports,
@@ -130,6 +131,22 @@ compared by identity; step list order is represented by validated transitions.
 Renames are conservatively reported as removal plus addition. This command
 reports structural changes only; it performs no impact analysis and makes no
 behavioral-equivalence claim.
+
+## Offline trace viewer
+
+Run a scenario to a local result file, then render it without re-execution:
+
+```console
+scenario --json run examples/cart.yaml --seed demo > result.json
+scenario trace-view /absolute/path/result.json --out /absolute/path/trace.html
+open /absolute/path/trace.html
+```
+
+The output is exactly one self-contained `scenario.trace-view/1` HTML file. It
+works offline through `file://`, requires no server, network, remote assets, or
+telemetry, and is read-only: source evidence is never changed. The viewer shows
+only facts present in the supported v1 result or `suite.run/1` artifact and never
+reruns a scenario or reconstructs missing runtime state.
 
 ## Documentation
 
