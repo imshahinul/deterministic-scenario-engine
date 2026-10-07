@@ -29,6 +29,7 @@ from scenario_engine.diff import (
 from scenario_engine.diagnostics import (
     HumanDiagnostic, bounded_text, render_error_envelope, render_human_diagnostic,
 )
+from scenario_engine.definition_diff import compare_definitions, render_definition_diff
 from scenario_engine.dsl import (
     DSLError, compile_document, parse_yaml, replay_scenario, run_scenario,
 )
@@ -178,12 +179,22 @@ def _parser() -> argparse.ArgumentParser:
     explain = commands.add_parser("explain", help="explain a recorded result")
     explain.add_argument("source", help="local result JSON path or - for stdin")
 
-    difference = commands.add_parser("diff", help="semantically compare two artifacts")
+    difference = commands.add_parser("diff", help="semantically compare two execution artifacts")
     difference.add_argument("left", help="first local artifact JSON path or -")
     difference.add_argument("right", help="second local artifact JSON path or -")
     difference.add_argument("--kind", choices=("result", "manifest", "suite"), default="result")
     difference.add_argument("--mode", choices=("first", "complete"), default="first")
     difference.add_argument("--max-records", type=int, default=DEFAULT_MAX_DIFF_RECORDS)
+
+    definition_diff = commands.add_parser(
+        "diff-definition", help="structurally compare two validated scenario definitions",
+        description=(
+            "Compare validated scenario definitions structurally, independent of YAML formatting. "
+            "This is distinct from 'scenario diff', which compares execution artifacts."
+        ),
+    )
+    definition_diff.add_argument("left", help="first local scenario YAML path or -")
+    definition_diff.add_argument("right", help="second local scenario YAML path or -")
 
     matrix = commands.add_parser("matrix", help="expand or execute a deterministic matrix")
     _source(matrix)
@@ -645,6 +656,14 @@ def _diff(args: argparse.Namespace) -> tuple[bytes, bytes, CLIExitCode]:
     return canonical_diff_bytes(document), (render_diff_text(document) + "\n").encode("utf-8"), code
 
 
+def _diff_definition(args: argparse.Namespace) -> tuple[bytes, bytes]:
+    used = [False]
+    left = parse_yaml(_text(_read(args.left, stdin_used=used), "left scenario"))
+    right = parse_yaml(_text(_read(args.right, stdin_used=used), "right scenario"))
+    document = compare_definitions(left, right)
+    return document.to_json_bytes(), (render_definition_diff(document) + "\n").encode("utf-8")
+
+
 def _matrix_plan(args: argparse.Namespace) -> MatrixPlan:
     target, composed = _load_target(args.source, args.root)
     raw_dimensions = _json_argument(args.dimensions, list, ())
@@ -990,6 +1009,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         handler = {
             "validate": _validate, "scaffold": _scaffold, "run": _run, "replay": _replay, "hash": _hash,
             "inspect": _inspect, "explain": _explain, "diff": _diff,
+            "diff-definition": _diff_definition,
             "matrix": _matrix, "batch": _batch, "export": _export,
             "verify": _verify, "migrate": _migrate,
         }[args.command]

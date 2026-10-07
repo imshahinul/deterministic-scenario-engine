@@ -35,6 +35,7 @@ make expected behavior explicit.
 - ordered Cartesian matrices with stable case IDs and original indexes
 - immutable ordered batch plans and worker-independent results
 - structured, redacted inspect/explain evidence and typed RFC 6901 semantic diff
+- validated scenario-definition structural diff with canonical semantic addresses
 - twelve-command `scenario` CLI for local and CI workflows, including bounded
   local evidence export, verification, and lossless migration
 - explicit immutable Domain Pack registries and pure Oracle Assertions
@@ -110,6 +111,25 @@ scenario, explicit inputs, algorithms/plugins, and recorded execution context.
 Unsupported cross-version replay fails explicitly. See the [determinism model](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/determinism.md),
 [reproducibility guide](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/reproducibility.md), and normative
 [compatibility contract](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/compatibility.md).
+
+## Structural definition comparison
+
+`scenario diff` compares recorded execution artifacts. The separate
+`scenario diff-definition scenario-a.yaml scenario-b.yaml` command validates and
+structurally compares two DSL 1 definitions without executing either one. Its
+JSON result uses `scenario.definition-diff/1`; changed entities use canonical
+`scenario.semantic-address/1` addresses rather than YAML paths.
+
+Comments, whitespace, YAML mapping-key order, and equivalent serialization
+layout produce zero changes. A real transition change is rendered as, for
+example, `CHANGED scenario:/step/checkout/transition/target`. Ordered DSL 1
+sequences remain ordered: emit order and control-flow branch case order are
+compared as structure. Identifier-keyed declarations (steps, generators,
+derives, writes, faults, invariants, constraints, validators, and resources) are
+compared by identity; step list order is represented by validated transitions.
+Renames are conservatively reported as removal plus addition. This command
+reports structural changes only; it performs no impact analysis and makes no
+behavioral-equivalence claim.
 
 ## Documentation
 
