@@ -137,3 +137,6 @@ def test_replay_help_exposes_reason_code_failure_contract() -> None:
     assert result.returncode == CLIExitCode.SUCCESS
     assert b"Incompatibility exits 5" in result.stdout
     assert b"stable replay reason code" in result.stdout
+    assert b"original external inputs" in result.stdout
+    assert b"recorded input fingerprint" in result.stdout
+    assert b"Missing required replay data fails closed" in result.stdout

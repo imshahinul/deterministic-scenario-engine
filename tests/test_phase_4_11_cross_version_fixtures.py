@@ -49,8 +49,10 @@ def test_fixture_manifest_contract_structure_and_deterministic_matrix(fixture_ma
     assert ids == sorted(ids) and len(ids) == len(set(ids))
     assert fixture_manifest["historical_corpus_absences"] == ["OLDER_INSPECTABLE_NOT_REPLAYABLE"]
     for item in fixture_manifest["fixtures"]:
-        assert set(item) == {"id", "artifact_contract", "source_version", "sha256", "classification",
+        assert set(item) >= {"id", "artifact_contract", "source_version", "sha256", "classification",
                              "provenance", "path", "operations"}
+        assert set(item) <= {"id", "artifact_contract", "source_version", "sha256", "classification",
+                             "provenance", "path", "operations", "scenario_resource", "inputs_resource"}
         assert set(item["operations"]) == set(OPERATIONS)
         assert all(operation["status"] in STATUSES for operation in item["operations"].values())
         assert item["provenance"]["kind"] in {"HISTORICAL_FIXTURE", "SYNTHETIC_NEGATIVE_FIXTURE"}
@@ -83,13 +85,16 @@ def test_current_and_historical_suite_fixtures_inspect_replay_and_diff(fixture_m
     indexed = records(fixture_manifest)
     current = artifact(indexed["current-2.1.2-suite-run-v1"])
     historical = artifact(indexed["historical-2.0.0-suite-run-v1"])
-    for path, selected in ((current, "7"), (historical, "5")):
+    for item in (indexed["current-2.1.2-suite-run-v1"], indexed["historical-2.0.0-suite-run-v1"]):
+        path = artifact(item)
+        scenario = CORPUS / item["scenario_resource"]
+        inputs = (CORPUS / item["inputs_resource"]).read_text(encoding="utf-8")
         inspected = invoke("--json", "inspect", str(path), "--kind", "suite")
-        replayed = invoke("--json", "replay", str(path), "--scenario", str(SCENARIO),
-                          "--inputs", '{"selected":' + selected + "}")
+        replayed = invoke("--json", "replay", str(path), "--scenario", str(scenario),
+                          "--inputs", inputs)
         assert inspected.returncode == replayed.returncode == CLIExitCode.SUCCESS
         assert json.loads(inspected.stdout)["target_kind"] == "run_manifest"
-        assert json.loads(replayed.stdout)["state"] == {"selected": int(selected)}
+        assert json.loads(replayed.stdout)["state"] == json.loads(inputs)
     difference = invoke("--json", "diff", str(current), str(historical), "--kind", "suite", "--mode", "complete")
     assert difference.returncode == CLIExitCode.DIFFERENT
     assert json.loads(difference.stdout)["schema_version"] == "semantic.diff/1"
@@ -115,6 +120,41 @@ def test_historical_result_is_inspectable_diffable_migratable_but_not_replayable
     assert (destination / "artifacts/source.json").read_bytes() == path.read_bytes()
     assert json.loads(migrated.stdout)["transformations"] == ["wrap-v1-result-as-evidence/1"]
     assert item["operations"]["replay"] == {"reason": "ENGINE_VERSION_UNSUPPORTED", "status": "UNSUPPORTED"}
+
+    replayed = invoke("--json", "replay", str(path), "--scenario", str(CORPUS / item["scenario_resource"]))
+    error = json.loads(replayed.stderr)
+    assert replayed.returncode == CLIExitCode.REPLAY_COMPATIBILITY and replayed.stdout == b""
+    assert error["schema"] == "scenario.error/1"
+    assert error["category"] == "REPLAY_COMPATIBILITY"
+    assert error["code"] == "ENGINE_VERSION_UNSUPPORTED"
+
+
+def test_missing_fixture_inputs_are_actionable_replay_diagnostics(fixture_manifest: dict) -> None:
+    item = records(fixture_manifest)["current-2.1.2-suite-run-v1"]
+    arguments = ("replay", str(artifact(item)), "--scenario", str(CORPUS / item["scenario_resource"]))
+    human = invoke(*arguments)
+    assert human.returncode == CLIExitCode.REPLAY_COMPATIBILITY and human.stdout == b""
+    assert b"code=REPLAY_DATA_INCOMPLETE" in human.stderr
+    assert b"next_action=PROVIDE_REQUIRED_REPLAY_INPUTS" in human.stderr
+    assert b"Traceback" not in human.stderr
+    machine = invoke("--json", *arguments)
+    error = json.loads(machine.stderr)
+    assert machine.returncode == CLIExitCode.REPLAY_COMPATIBILITY and machine.stdout == b""
+    assert error["schema"] == "scenario.error/1"
+    assert error["category"] == "REPLAY_COMPATIBILITY"
+    assert error["code"] == "REPLAY_DATA_INCOMPLETE"
+    assert error["remediation"] == "PROVIDE_REQUIRED_REPLAY_INPUTS"
+
+
+def test_fixture_manifest_publishes_complete_replay_command_resources(fixture_manifest: dict) -> None:
+    indexed = records(fixture_manifest)
+    for fixture_id in ("current-2.1.2-suite-run-v1", "historical-2.0.0-suite-run-v1"):
+        item = indexed[fixture_id]
+        assert (CORPUS / item["scenario_resource"]).is_file()
+        assert (CORPUS / item["inputs_resource"]).is_file()
+    historical = indexed["historical-1.0.0-result-v1"]
+    assert (CORPUS / historical["scenario_resource"]).is_file()
+    assert "inputs_resource" not in historical
 
 
 @pytest.mark.parametrize(("fixture_id", "reason"), (

@@ -94,6 +94,58 @@ provenance, SHA-256 values, and per-operation expectations are frozen under the
 public states and synthetic negative cases; it is not a promise of universal
 backward compatibility.
 
+### Consuming the compatibility fixture bundle
+
+The fixture manifest's optional `scenario_resource` and `inputs_resource`
+fields identify the immutable public resources needed to construct replay
+commands. Run these examples from the root of the supplied `phase4_11` fixture
+bundle. `--inputs` takes a bounded JSON object, so the companion file is read as
+the argument instead of copying a magic value into shell quoting.
+
+The current fixture replays with its published scenario and inputs:
+
+```sh
+scenario --json replay artifacts/current-2.1.2-suite-run-v1.json \
+  --scenario scenarios/compatibility_case.yaml \
+  --inputs "$(cat inputs/current-2.1.2-suite-run-v1.inputs.json)"
+```
+
+The historical 2.0.0 suite fixture remains replayable with its own published
+inputs:
+
+```sh
+scenario --json replay artifacts/historical-2.0.0-suite-run-v1.json \
+  --scenario scenarios/compatibility_case.yaml \
+  --inputs "$(cat inputs/historical-2.0.0-suite-run-v1.inputs.json)"
+```
+
+The historical 1.0.0 result is inspectable and migratable but is not a supported
+replay artifact. This command fails closed with exit 5 and
+`ENGINE_VERSION_UNSUPPORTED` in the `scenario.error/1` envelope:
+
+```sh
+scenario --json replay artifacts/historical-1.0.0-result-v1.json \
+  --scenario scenarios/compatibility_case.yaml
+```
+
+Its existing lossless migration route can be exercised without repository or
+maintainer-local paths. The migration CLI requires absolute local source and
+destination paths, so derive both from the fixture workspace:
+
+```sh
+BUNDLE="$(pwd)"
+scenario --json migrate "$BUNDLE/artifacts/historical-1.0.0-result-v1.json" \
+  "$BUNDLE/migrated-historical-1.0.0" --artifact-kind result \
+  --schema-version scenario.result/1 --product-version 1.0.0 \
+  --source-sha256 ea7068eac7888857800c2784eb1e662dbe7de4bb62f89e2e26f23b9150dc3a67
+```
+
+Replay input values are external execution data, not recoverable from their
+recorded fingerprints. When an artifact records required external inputs,
+omitting them or supplying data that cannot be resolved fails closed with exit
+5, `REPLAY_DATA_INCOMPLETE`, and the next action
+`PROVIDE_REQUIRED_REPLAY_INPUTS`; it never reveals a hash preimage.
+
 ## Plugins
 
 A plugin name identifies a generator family. Its version is an exact,

@@ -52,7 +52,8 @@ def test_top_level_and_phase4_command_help_are_coherent() -> None:
         assert command in top.stdout
     checks = {
         "run": (b"scenario.result/1", b"suite.run/1", b"not automatically replayable"),
-        "replay": (b"suite.run/1", b"stable replay reason code"),
+        "replay": (b"suite.run/1", b"stable replay reason code", b"original external inputs",
+                   b"recorded input fingerprint", b"fails closed"),
         "diff-definition": (b"structurally", b"scenario.semantic-address/1", b"does not run impact"),
         "impact": (b"DIRECT", b"TRANSITIVE_POSSIBLE", b"UNKNOWN does not mean unaffected", b"not a probability"),
         "scaffold": (b"offline", b"No API key", b"runtime LLM", b"never executes", b"untrusted"),

@@ -52,6 +52,7 @@ from scenario_engine.impact import analyze_impact, render_impact_analysis
 from scenario_engine.manifest import (
     ReplayCompatibilityError, ReplayCompatibilityReason, ReproducibilityManifest,
 )
+from scenario_engine.resources import ResourceResolutionError
 from scenario_engine.scaffolding import (
     DEFAULT_SCAFFOLD_PROVIDER, ScaffoldError, ScaffoldRequest, scaffold_scenario,
 )
@@ -183,12 +184,17 @@ def _parser() -> argparse.ArgumentParser:
         "replay", help="replay a supported suite.run/1 artifact with fail-closed compatibility",
         description=(
             "Replay a supported suite.run/1 recorded manifest. Incompatibility exits 5 and "
-            "reports a stable replay reason code on stderr."
+            "reports a stable replay reason code on stderr. The original external inputs may "
+            "be required: --inputs must match the recorded input fingerprint where applicable. "
+            "Missing required replay data fails closed with exit 5."
         ),
     )
     replay.add_argument("source", help="local suite.run/1 replay artifact path or - for stdin")
     replay.add_argument("--scenario", required=True, help="explicit local scenario YAML path")
-    replay.add_argument("--inputs", help="bounded JSON object")
+    replay.add_argument(
+        "--inputs",
+        help="bounded JSON object containing original external inputs required by the artifact",
+    )
 
     trace_view = commands.add_parser(
         "trace-view", help="render a self-contained offline HTML trace view",
@@ -558,10 +564,29 @@ def _replay(args: argparse.Namespace) -> tuple[bytes, bytes]:
         manifest = suite_value.child_manifest
         _require_replay_compatibility(suite_value, scenario)
     else:
+        try:
+            historical_result = read_v1_result_bytes(artifact)
+        except ArtifactReadError:
+            historical_result = None
+        if historical_result is not None:
+            recorded_version = historical_result.payload["manifest"]["engine_version"]
+            raise UnsupportedReplayContractError(
+                recorded_version, (f"scenario-engine/{ENGINE_VERSION}",),
+            )
         read = read_v1_manifest_bytes(artifact)
         read.require_execution_replay()
         manifest = _manifest(read.payload)
-    result = replay_scenario(scenario, manifest, inputs=inputs)
+    try:
+        result = replay_scenario(scenario, manifest, inputs=inputs)
+    except ResourceResolutionError:
+        raise ReplayCompatibilityError(
+            "required external replay inputs are missing or cannot be resolved",
+            reason=ReplayCompatibilityReason.REPLAY_DATA_INCOMPLETE,
+            artifact_contract="suite.run/1",
+            remediation="PROVIDE_REQUIRED_REPLAY_INPUTS",
+            migration=ReplayCompatibilityReason.MIGRATION_UNAVAILABLE,
+            missing=("--inputs",),
+        ) from None
     data = result.to_json_bytes()
     return data, data
 
