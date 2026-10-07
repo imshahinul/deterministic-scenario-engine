@@ -22,6 +22,7 @@ from scenario_engine.composition import (
     UnsupportedCompositionSourceError,
     execute_composed_suite, load_composed_suite,
 )
+from scenario_engine.compatibility_fixtures import export_compatibility_fixtures
 from scenario_engine.diff import (
     DEFAULT_MAX_DIFF_RECORDS, DiffBoundError, DiffError, canonical_diff_bytes,
     render_diff_text, semantic_diff,
@@ -272,6 +273,36 @@ def _parser() -> argparse.ArgumentParser:
     batch.add_argument("source", help="local bounded batch-plan JSON path or - for stdin")
     batch.add_argument("--workers", type=int, default=1, help="bounded execution strategy")
     batch.add_argument("--max-in-flight", type=int, default=64, help="bounded scheduling window")
+
+    compatibility_fixtures = commands.add_parser(
+        "compatibility-fixtures",
+        help="discover and export the frozen public compatibility fixture corpus",
+        description=(
+            "Export the frozen public compatibility fixture corpus containing current, historical, "
+            "and synthetic artifacts for replay, inspect, migrate, and compatibility exercises. "
+            "The export is copied from immutable installed package resources; no source checkout "
+            "or network access is used."
+        ),
+        epilog=(
+            "Export to an absent absolute local directory with: "
+            "scenario compatibility-fixtures export --out /absolute/path"
+        ),
+    )
+    fixture_actions = compatibility_fixtures.add_subparsers(
+        dest="fixture_action", required=True, metavar="ACTION"
+    )
+    fixture_export = fixture_actions.add_parser(
+        "export",
+        help="copy the complete frozen corpus to an absent local directory",
+        description=(
+            "Copy the complete frozen current, historical, and synthetic compatibility fixture "
+            "corpus from installed package resources for replay, inspect, and migrate exercises."
+        ),
+    )
+    fixture_export.add_argument(
+        "--out", required=True,
+        help="absent absolute local filesystem path for the exported frozen fixture directory",
+    )
 
     export = commands.add_parser("export", help="copy a verified local evidence bundle to an absent destination")
     export.add_argument("source", help="absolute local filesystem path to an evidence bundle root")
@@ -925,6 +956,17 @@ def _verify(args: argparse.Namespace) -> tuple[bytes, bytes]:
     ).encode("utf-8")
 
 
+def _compatibility_fixtures(args: argparse.Namespace) -> tuple[bytes, bytes]:
+    destination = _require_absolute_local(args.out, "compatibility fixture destination")
+    exported = export_compatibility_fixtures(destination)
+    value = {
+        "command": "compatibility-fixtures export",
+        "destination": str(exported),
+        "schema": "scenario.compatibility-fixtures/1",
+    }
+    return _canonical(value), f"exported frozen compatibility fixtures to {exported}\n".encode()
+
+
 def _migrate(args: argparse.Namespace) -> tuple[bytes, bytes]:
     _reject_remote(args.source)
     descriptor = ArtifactDescriptor(
@@ -1144,7 +1186,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "trace-view": _trace_view, "hash": _hash,
             "inspect": _inspect, "explain": _explain, "diff": _diff,
             "diff-definition": _diff_definition, "impact": _impact,
-            "matrix": _matrix, "batch": _batch, "export": _export,
+            "matrix": _matrix, "batch": _batch,
+            "compatibility-fixtures": _compatibility_fixtures, "export": _export,
             "verify": _verify, "migrate": _migrate,
         }[args.command]
         outcome = handler(args)

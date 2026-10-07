@@ -96,11 +96,21 @@ backward compatibility.
 
 ### Consuming the compatibility fixture bundle
 
+Starting only from an installed Scenario Engine, discover this workflow through
+`scenario --help`, then export the complete frozen corpus to an absent absolute
+local directory (no source checkout or network access is required):
+
+```sh
+scenario compatibility-fixtures export --out /absolute/path/phase4_11
+cd /absolute/path/phase4_11
+```
+
 The fixture manifest's optional `scenario_resource` and `inputs_resource`
 fields identify the immutable public resources needed to construct replay
-commands. Run these examples from the root of the supplied `phase4_11` fixture
-bundle. `--inputs` takes a bounded JSON object, so the companion file is read as
-the argument instead of copying a magic value into shell quoting.
+commands. The bundle contains current, historical, and synthetic artifacts for
+replay, inspect, migrate, and compatibility exercises. Its bytes are frozen.
+`--inputs` takes a bounded JSON object, so the companion file is read as the
+argument instead of copying a magic value into shell quoting.
 
 The current fixture replays with its published scenario and inputs:
 
@@ -126,6 +136,22 @@ replay artifact. This command fails closed with exit 5 and
 ```sh
 scenario --json replay artifacts/historical-1.0.0-result-v1.json \
   --scenario scenarios/compatibility_case.yaml
+```
+
+Omitting the current artifact's required inputs fails with
+`REPLAY_DATA_INCOMPLETE`:
+
+```sh
+scenario --json replay artifacts/current-2.1.2-suite-run-v1.json \
+  --scenario scenarios/compatibility_case.yaml
+```
+
+An unknown engine compatibility value fails closed with
+`ENGINE_VERSION_UNSUPPORTED`:
+
+```sh
+scenario --json replay artifacts/synthetic-unknown-engine-suite-run-v1.json \
+  --scenario scenarios/compatibility_case.yaml --inputs '{"selected":7}'
 ```
 
 Its existing lossless migration route can be exercised without repository or

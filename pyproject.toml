@@ -52,5 +52,8 @@ where = ["src"]
 include = ["scenario_engine*"]
 namespaces = false
 
+[tool.setuptools.package-data]
+scenario_engine = ["data/compatibility/phase4_11/**/*"]
+
 [tool.unittest]
 start-directory = "tests"

@@ -89,6 +89,10 @@ Unsupported cross-version replay fails explicitly. See the [determinism model](h
 [reproducibility guide](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/reproducibility.md), and normative
 [compatibility contract](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/compatibility.md).
 
+The installed public compatibility corpus can be discovered with
+`scenario --help` and exported without a source checkout using
+`scenario compatibility-fixtures export --out /absolute/path`.
+
 ## Canonical command workflows
 
 Use the [quickstart](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/quickstart.md#canonical-installed-package-workflows)

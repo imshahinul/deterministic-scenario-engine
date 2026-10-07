@@ -3,6 +3,7 @@ include README.md
 include setup.py
 include pyproject.toml
 recursive-include src *.py
+recursive-include src/scenario_engine/data/compatibility/phase4_11 *
 recursive-include docs *.md
 recursive-include examples *.yaml
 include examples/phase3_ecommerce_evidence.py
