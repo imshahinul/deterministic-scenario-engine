@@ -80,6 +80,20 @@ and exact compatibility-tuple matches. Unsupported cross-version replay fails
 explicitly; indefinite replay across incompatible future major versions is not
 promised.
 
+## Cross-version assurance
+
+Inspection support is intentionally independent from replay support: an artifact
+may remain safely inspectable while exact replay is rejected. Migration is an
+explicit, non-destructive operation and is available only for already-supported
+routes; reading never silently migrates an artifact. Unsupported and unknown
+contracts or versions fail closed rather than being treated as current-compatible.
+
+These boundaries are tested against a small immutable corpus whose bytes,
+provenance, SHA-256 values, and per-operation expectations are frozen under the
+`scenario.compatibility-fixtures/1` manifest. The corpus represents selected
+public states and synthetic negative cases; it is not a promise of universal
+backward compatibility.
+
 ## Plugins
 
 A plugin name identifies a generator family. Its version is an exact,

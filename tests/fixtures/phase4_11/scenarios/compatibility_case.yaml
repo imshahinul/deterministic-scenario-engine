@@ -1,0 +1,10 @@
+dsl_version: 1
+scenario: compatibility_case
+clock: {start: '2026-01-01T00:00:00Z'}
+resources:
+  selected: {$input: selected}
+initial_state: {selected: 0}
+steps:
+  - id: set
+    write: {selected: {$resource: selected}}
+    transition: null
