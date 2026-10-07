@@ -304,6 +304,22 @@ keys and LF at the CLI boundary. Unknown schema versions and unknown required
 codes fail closed. The schema is not coupled to package, engine, manifest, DSL,
 semantic-address, or evidence-bundle versions.
 
+Phase 4.5 implements this envelope on the established stderr error channel when
+the existing global `--json` mode is selected. Required fields are `schema`,
+`code`, `category`, `exit_code`, and `message`. The optional fields
+`semantic_path`, `expected`, `received`, `remediation`, and `details` are omitted
+when unavailable; explicit null and empty objects are not emitted. Exact message
+prose is presentation, not the primary automation contract.
+
+The finite categories exposed by this checkpoint are `DSL_SCHEMA`,
+`DSL_SEMANTIC`, `REPLAY_COMPATIBILITY`, `FILESYSTEM_TRUST_BOUNDARY`, `CLI_USAGE`,
+`COMMAND`, and `INTERNAL`. The domain codes are the three DSL codes, the six
+replay compatibility codes, and the nine filesystem trust-boundary codes frozen
+in their respective sections; bounded fallback codes are `CLI_ERROR`,
+`COMMAND_ERROR`, and `INTERNAL_ERROR`. Human and JSON renderers consume the same
+internal canonical diagnostic. Details are sorted, scalar-only, bounded, and
+never contain exception dumps, tracebacks, stack locals, or arbitrary payloads.
+
 ## 9. Filesystem trust-boundary UX
 
 The current local-only, explicit-root, regular-file, no-follow, bounded,

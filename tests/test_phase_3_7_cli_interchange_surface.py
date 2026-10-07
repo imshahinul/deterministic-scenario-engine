@@ -150,7 +150,10 @@ def test_verify_rejects_invalid_unsafe_or_changed_bundle(tmp_path: Path, failure
         target.symlink_to(source / value.entries[1].path)
     result = invoke("--json", "verify", str(source))
     assert result.returncode in (CLIExitCode.VALIDATION, CLIExitCode.SECURITY_OR_BOUND)
-    assert result.stdout == b"" and result.stderr.startswith(b"scenario: error: ")
+    assert result.stdout == b""
+    error = json.loads(result.stderr)
+    assert error["schema"] == "scenario.error/1"
+    assert error["exit_code"] == result.returncode
     assert b"Traceback" not in result.stderr
 
 

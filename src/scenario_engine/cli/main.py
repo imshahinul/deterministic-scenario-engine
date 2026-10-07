@@ -26,7 +26,9 @@ from scenario_engine.diff import (
     DEFAULT_MAX_DIFF_RECORDS, DiffBoundError, DiffError, canonical_diff_bytes,
     render_diff_text, semantic_diff,
 )
-from scenario_engine.diagnostics import HumanDiagnostic, render_human_diagnostic
+from scenario_engine.diagnostics import (
+    HumanDiagnostic, bounded_text, render_error_envelope, render_human_diagnostic,
+)
 from scenario_engine.dsl import (
     DSLError, compile_document, parse_yaml, replay_scenario, run_scenario,
 )
@@ -791,33 +793,49 @@ def _diagnostic(message: str) -> None:
     sys.stderr.write(f"scenario: error: {safe}\n")
 
 
-def _human_diagnostic(error: DSLError) -> None:
+def _dsl_diagnostic(error: DSLError) -> HumanDiagnostic:
     diagnostic = getattr(error, "human_diagnostic", None)
     if not isinstance(diagnostic, HumanDiagnostic):
         diagnostic = HumanDiagnostic(
             "DSL_SEMANTIC_ERROR", "DSL_SEMANTIC", "scenario validation failed",
             remediation="correct the scenario declaration",
         )
-    sys.stderr.write(render_human_diagnostic(diagnostic))
+    return diagnostic
 
 
-def _replay_diagnostic(error: ReplayCompatibilityError) -> None:
-    fields = [f"code={error.reason_code}", f"category={error.category}"]
+def _replay_diagnostic(error: ReplayCompatibilityError) -> HumanDiagnostic:
+    details: dict[str, str] = {}
     if error.artifact_contract is not None:
-        fields.append(f"artifact_contract={error.artifact_contract}")
-    if error.expected is not None:
-        fields.append(f"expected={error.expected}")
-    if error.received is not None:
-        fields.append(f"received={error.received}")
+        details["artifact_contract"] = bounded_text(error.artifact_contract)
     if error.scenario_expected is not None:
-        fields.append(f"scenario_expected={error.scenario_expected}")
+        details["scenario_expected"] = bounded_text(error.scenario_expected)
     if error.scenario_received is not None:
-        fields.append(f"scenario_received={error.scenario_received}")
+        details["scenario_received"] = bounded_text(error.scenario_received)
     if error.missing:
-        fields.append(f"missing={','.join(error.missing)}")
+        details["missing"] = bounded_text(",".join(error.missing))
     if error.migration is not None:
-        fields.append(f"migration={error.migration.value}")
-    fields.append(f"next_action={error.remediation}")
+        details["migration"] = error.migration.value
+    return HumanDiagnostic(
+        error.reason_code, error.category, "replay artifact is incompatible",
+        expected=None if error.expected is None else bounded_text(error.expected),
+        received=None if error.received is None else bounded_text(error.received),
+        remediation=error.remediation, details=details,
+    )
+
+
+def _render_replay_human(diagnostic: HumanDiagnostic) -> None:
+    fields = [f"code={diagnostic.code}", f"category={diagnostic.category}"]
+    details = diagnostic.details or {}
+    if "artifact_contract" in details:
+        fields.append(f"artifact_contract={details['artifact_contract']}")
+    if diagnostic.expected is not None:
+        fields.append(f"expected={diagnostic.expected}")
+    if diagnostic.received is not None:
+        fields.append(f"received={diagnostic.received}")
+    for name in ("scenario_expected", "scenario_received", "missing", "migration"):
+        if name in details:
+            fields.append(f"{name}={details[name]}")
+    fields.append(f"next_action={diagnostic.remediation}")
     _diagnostic("; ".join(fields))
 
 
@@ -861,7 +879,7 @@ def _path_reason(error: Exception) -> PathReason | None:
     return None
 
 
-def _path_diagnostic(reason: PathReason, operation: str) -> None:
+def _path_diagnostic(reason: PathReason, operation: str) -> HumanDiagnostic:
     actions = {
         PathReason.PATH_NOT_ABSOLUTE: "SUPPLY_ABSOLUTE_LOCAL_FILESYSTEM_PATH",
         PathReason.PATH_REMOTE_FORBIDDEN: "SUPPLY_LOCAL_FILESYSTEM_PATH",
@@ -873,10 +891,24 @@ def _path_diagnostic(reason: PathReason, operation: str) -> None:
         PathReason.DESTINATION_PARENT_MISSING: "SUPPLY_DESTINATION_WITH_EXISTING_PARENT",
         PathReason.DESTINATION_NOT_WRITABLE: "SUPPLY_WRITABLE_DESTINATION_PARENT",
     }
-    _diagnostic(
-        f"code={reason.value}; category=FILESYSTEM_TRUST_BOUNDARY; operation={operation}; "
-        f"path_kind=local_filesystem; next_action={actions[reason]}"
+    return HumanDiagnostic(
+        reason.value, "FILESYSTEM_TRUST_BOUNDARY", "local filesystem path was rejected",
+        remediation=actions[reason],
+        details={"operation": bounded_text(operation), "path_kind": "local_filesystem"},
     )
+
+
+def _render_path_human(diagnostic: HumanDiagnostic) -> None:
+    details = diagnostic.details or {}
+    _diagnostic(
+        f"code={diagnostic.code}; category={diagnostic.category}; "
+        f"operation={details['operation']}; path_kind={details['path_kind']}; "
+        f"next_action={diagnostic.remediation}"
+    )
+
+
+def _emit_machine(diagnostic: HumanDiagnostic, code: CLIExitCode) -> None:
+    sys.stderr.write(render_error_envelope(diagnostic, int(code)))
 
 
 def _mapped(error: Exception) -> CLIExitCode:
@@ -907,8 +939,10 @@ def _mapped(error: Exception) -> CLIExitCode:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the shared CLI and return one frozen exit-family integer."""
+    requested = tuple(sys.argv[1:] if argv is None else argv)
+    json_mode = "--json" in requested
     try:
-        args = _parser().parse_args(argv)
+        args = _parser().parse_args(requested)
         handler = {
             "validate": _validate, "run": _run, "replay": _replay, "hash": _hash,
             "inspect": _inspect, "explain": _explain, "diff": _diff,
@@ -923,25 +957,56 @@ def main(argv: Sequence[str] | None = None) -> int:
     except _CLIError as error:
         reason = _path_reason(error)
         if reason is not None:
-            _path_diagnostic(reason, getattr(locals().get("args"), "command", "cli"))
+            diagnostic = _path_diagnostic(reason, getattr(locals().get("args"), "command", "cli"))
+            if json_mode:
+                _emit_machine(diagnostic, error.code)
+            else:
+                _render_path_human(diagnostic)
         else:
-            _diagnostic(str(error))
+            diagnostic = HumanDiagnostic(
+                "CLI_ERROR", "CLI_USAGE", bounded_text(str(error)),
+                remediation="correct the command invocation",
+            )
+            if json_mode:
+                _emit_machine(diagnostic, error.code)
+            else:
+                _diagnostic(str(error))
         return int(error.code)
     except Exception as error:
         code = _mapped(error)
         if isinstance(error, ReplayCompatibilityError):
-            _replay_diagnostic(error)
+            diagnostic = _replay_diagnostic(error)
+            if json_mode:
+                _emit_machine(diagnostic, code)
+            else:
+                _render_replay_human(diagnostic)
             return int(code)
         reason = _path_reason(error)
         if reason is not None:
-            _path_diagnostic(reason, getattr(locals().get("args"), "command", "cli"))
+            diagnostic = _path_diagnostic(reason, getattr(locals().get("args"), "command", "cli"))
+            if json_mode:
+                _emit_machine(diagnostic, code)
+            else:
+                _render_path_human(diagnostic)
             return int(code)
         if isinstance(error, DSLError):
-            _human_diagnostic(error)
+            diagnostic = _dsl_diagnostic(error)
+            if json_mode:
+                _emit_machine(diagnostic, code)
+            else:
+                sys.stderr.write(render_human_diagnostic(diagnostic))
             return int(code)
         if code is CLIExitCode.INTERNAL:
             message = "unexpected internal error"
         else:
             message = f"{type(error).__name__} occurred"
-        _diagnostic(message)
+        diagnostic = HumanDiagnostic(
+            "INTERNAL_ERROR" if code is CLIExitCode.INTERNAL else "COMMAND_ERROR",
+            "INTERNAL" if code is CLIExitCode.INTERNAL else "COMMAND",
+            message,
+        )
+        if json_mode:
+            _emit_machine(diagnostic, code)
+        else:
+            _diagnostic(message)
         return int(code)

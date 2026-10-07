@@ -65,6 +65,15 @@ def test_wrong_scenario_reports_stable_identity_context(replay_files: tuple[Path
     assert b"scenario_expected=diagnostic_case" in result.stderr
     assert b"scenario_received=wrong_case" in result.stderr
     assert b"next_action=SUPPLY_EXACT_SCENARIO" in result.stderr
+    machine = invoke("--json", "replay", str(artifact), "--scenario", str(wrong), "--inputs", '{"selected":1}')
+    value = json.loads(machine.stderr)
+    assert machine.returncode == 5 and machine.stdout == b""
+    assert value["schema"] == "scenario.error/1"
+    assert value["code"] == "SCENARIO_MISMATCH"
+    assert value["category"] == "REPLAY_COMPATIBILITY"
+    assert value["exit_code"] == 5
+    assert value["details"]["scenario_expected"] == "diagnostic_case"
+    assert value["details"]["scenario_received"] == "wrong_case"
 
 
 def test_unsupported_engine_reports_versions_and_safe_action(replay_files: tuple[Path, Path, Path], tmp_path: Path) -> None:
@@ -78,6 +87,13 @@ def test_unsupported_engine_reports_versions_and_safe_action(replay_files: tuple
     assert b"expected=scenario-engine/1.0.0" in result.stderr
     assert b"received=scenario-engine/9.0.0" in result.stderr
     assert b"next_action=USE_SUPPORTED_ENGINE" in result.stderr
+    machine = invoke("--json", "replay", str(unsupported), "--scenario", str(scenario), "--inputs", '{"selected":1}')
+    value = json.loads(machine.stderr)
+    assert machine.returncode == 5 and machine.stdout == b""
+    assert value["schema"] == "scenario.error/1"
+    assert value["code"] == "ENGINE_VERSION_UNSUPPORTED"
+    assert value["expected"] == "scenario-engine/1.0.0"
+    assert value["received"] == "scenario-engine/9.0.0"
 
 
 def test_unsupported_manifest_reports_contract_and_no_known_migration(replay_files: tuple[Path, Path, Path], tmp_path: Path) -> None:
@@ -89,11 +105,19 @@ def test_unsupported_manifest_reports_contract_and_no_known_migration(replay_fil
     first = invoke("--json", "replay", str(unsupported), "--scenario", str(scenario), "--inputs", '{"selected":1}')
     second = invoke("--json", "replay", str(unsupported), "--scenario", str(scenario), "--inputs", '{"selected":1}')
     assert first.stderr == second.stderr
-    assert_diagnostic(first, b"MANIFEST_VERSION_UNSUPPORTED")
-    assert b"artifact_contract=suite.run/2" in first.stderr
-    assert b"expected=suite.run/1" in first.stderr
-    assert b"received=suite.run/2" in first.stderr
-    assert b"next_action=USE_SUPPORTED_MANIFEST_OR_MIGRATION" in first.stderr
+    value = json.loads(first.stderr)
+    assert first.returncode == CLIExitCode.REPLAY_COMPATIBILITY and first.stdout == b""
+    assert value == {
+        "category": "REPLAY_COMPATIBILITY",
+        "code": "MANIFEST_VERSION_UNSUPPORTED",
+        "details": {"artifact_contract": "suite.run/2", "migration": "MIGRATION_UNAVAILABLE"},
+        "exit_code": 5,
+        "expected": "suite.run/1",
+        "message": "replay artifact is incompatible",
+        "received": "suite.run/2",
+        "remediation": "USE_SUPPORTED_MANIFEST_OR_MIGRATION",
+        "schema": "scenario.error/1",
+    }
 
 
 def test_incomplete_supported_envelope_reports_replay_data_incomplete(replay_files: tuple[Path, Path, Path], tmp_path: Path) -> None:
