@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from enum import IntEnum
+from enum import Enum, IntEnum
 import json
 from pathlib import Path
 import re
@@ -18,7 +18,8 @@ from scenario_engine._version import ENGINE_VERSION
 from scenario_engine.canonical import canonical_scenario_hash
 from scenario_engine.composition import (
     ComposedSuite, CompositionBoundError, CompositionError,
-    CompositionPathError, UnsupportedCompositionSourceError,
+    CompositionPathError, CompositionRootEscapeError, ModuleNotFoundError as CompositionModuleNotFoundError,
+    UnsupportedCompositionSourceError,
     execute_composed_suite, load_composed_suite,
 )
 from scenario_engine.diff import (
@@ -78,10 +79,27 @@ class CLIExitCode(IntEnum):
     INTERNAL = 8
 
 
+class PathReason(str, Enum):
+    """Stable public classifications for local filesystem trust-boundary failures."""
+
+    PATH_NOT_ABSOLUTE = "PATH_NOT_ABSOLUTE"
+    PATH_REMOTE_FORBIDDEN = "PATH_REMOTE_FORBIDDEN"
+    PATH_OUTSIDE_ALLOWED_ROOT = "PATH_OUTSIDE_ALLOWED_ROOT"
+    PATH_NOT_FOUND = "PATH_NOT_FOUND"
+    PATH_UNSAFE = "PATH_UNSAFE"
+    INVALID_DESTINATION = "INVALID_DESTINATION"
+    DESTINATION_ALREADY_EXISTS = "DESTINATION_ALREADY_EXISTS"
+    DESTINATION_PARENT_MISSING = "DESTINATION_PARENT_MISSING"
+    DESTINATION_NOT_WRITABLE = "DESTINATION_NOT_WRITABLE"
+
+
 class _CLIError(Exception):
-    def __init__(self, message: str, code: CLIExitCode) -> None:
+    def __init__(
+        self, message: str, code: CLIExitCode, *, path_reason: PathReason | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
+        self.path_reason = path_reason
 
 
 class _Parser(argparse.ArgumentParser):
@@ -153,15 +171,15 @@ def _parser() -> argparse.ArgumentParser:
     batch.add_argument("--max-in-flight", type=int, default=64, help="bounded scheduling window")
 
     export = commands.add_parser("export", help="export a validated local evidence bundle")
-    export.add_argument("source", help="explicit local evidence bundle root")
-    export.add_argument("destination", help="absent local destination directory")
+    export.add_argument("source", help="absolute local filesystem path to an evidence bundle root")
+    export.add_argument("destination", help="absent absolute local filesystem path for the destination directory")
 
     verify = commands.add_parser("verify", help="verify a local evidence bundle")
-    verify.add_argument("bundle", help="explicit local evidence bundle root")
+    verify.add_argument("bundle", help="absolute local filesystem path to an evidence bundle root")
 
     migrate = commands.add_parser("migrate", help="execute a planned lossless migration")
-    migrate.add_argument("source", help="explicit local source artifact path")
-    migrate.add_argument("destination", help="absent local destination directory")
+    migrate.add_argument("source", help="absolute local filesystem path to the source artifact")
+    migrate.add_argument("destination", help="absent absolute local filesystem path for the destination directory")
     migrate.add_argument("--artifact-kind", required=True, help="explicit artifact kind")
     migrate.add_argument("--schema-version", required=True, help="explicit source schema contract")
     migrate.add_argument("--product-version", required=True, help="explicit source product version")
@@ -173,7 +191,7 @@ def _parser() -> argparse.ArgumentParser:
 
 def _source(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("source", help="explicit local scenario YAML path or - for stdin")
-    parser.add_argument("--root", help="explicit composition root")
+    parser.add_argument("--root", help="absolute local filesystem path to the composition root")
 
 
 def _execution(parser: argparse.ArgumentParser) -> None:
@@ -186,7 +204,29 @@ def _execution(parser: argparse.ArgumentParser) -> None:
 def _reject_remote(source: str) -> None:
     lowered = source.lower()
     if lowered.startswith(("http://", "https://")) or (_SCHEME.match(source) and source != "-"):
-        raise _CLIError("remote and URI-like input sources are forbidden", CLIExitCode.SECURITY_OR_BOUND)
+        raise _CLIError(
+            "remote and URI-like input sources are forbidden", CLIExitCode.SECURITY_OR_BOUND,
+            path_reason=PathReason.PATH_REMOTE_FORBIDDEN,
+        )
+
+
+def _require_absolute_local(value: str, label: str) -> Path:
+    """Apply public path-form checks before delegating to authoritative filesystem checks."""
+    _reject_remote(value)
+    try:
+        path = Path(value)
+    except (TypeError, ValueError):
+        reason = PathReason.INVALID_DESTINATION if "destination" in label else PathReason.PATH_UNSAFE
+        raise _CLIError(
+            f"{label} is not a valid local filesystem path", CLIExitCode.SECURITY_OR_BOUND,
+            path_reason=reason,
+        ) from None
+    if not path.is_absolute():
+        raise _CLIError(
+            f"{label} must be an absolute local filesystem path",
+            CLIExitCode.SECURITY_OR_BOUND, path_reason=PathReason.PATH_NOT_ABSOLUTE,
+        )
+    return path
 
 
 def _read(source: str, *, limit: int = MAX_CLI_INPUT_BYTES, stdin_used: list[bool] | None = None) -> bytes:
@@ -200,8 +240,16 @@ def _read(source: str, *, limit: int = MAX_CLI_INPUT_BYTES, stdin_used: list[boo
     else:
         path = Path(source)
         try:
+            if not path.exists():
+                raise _CLIError(
+                    "input source was not found", CLIExitCode.IO,
+                    path_reason=PathReason.PATH_NOT_FOUND,
+                )
             if not path.is_file():
-                raise _CLIError("input source must be a regular local file", CLIExitCode.IO)
+                raise _CLIError(
+                    "input source must be a regular local file", CLIExitCode.IO,
+                    path_reason=PathReason.PATH_UNSAFE,
+                )
             if path.stat().st_size > limit:
                 raise _CLIError(f"input exceeds {limit} bytes", CLIExitCode.SECURITY_OR_BOUND)
             data = path.read_bytes()
@@ -260,7 +308,10 @@ def _load_target(source: str, root: str | None) -> tuple[Any, bool]:
         return compile_document(document), False
     composition_root = Path(root) if root is not None else Path(source).parent
     if root is not None and not composition_root.is_absolute():
-        raise _CLIError("composition root must be explicit and absolute", CLIExitCode.SECURITY_OR_BOUND)
+        raise _CLIError(
+            "composition root must be an absolute local filesystem path",
+            CLIExitCode.SECURITY_OR_BOUND, path_reason=PathReason.PATH_NOT_ABSOLUTE,
+        )
     direct_error: Exception | None = None
     if root is None:
         try:
@@ -347,13 +398,24 @@ def _write_replay_artifact(destination: str, envelope: RunManifestEnvelope) -> N
     try:
         publish_suite_bytes(canonical_suite_bytes(envelope), path)
     except FileExistsError:
-        raise _CLIError("replay output path must not already exist", CLIExitCode.IO) from None
+        raise _CLIError(
+            "replay output path must not already exist", CLIExitCode.IO,
+            path_reason=PathReason.DESTINATION_ALREADY_EXISTS,
+        ) from None
+    except FileNotFoundError:
+        raise _CLIError(
+            "replay output parent directory does not exist", CLIExitCode.IO,
+            path_reason=PathReason.DESTINATION_PARENT_MISSING,
+        ) from None
     except OSError:
         try:
             path.unlink(missing_ok=True)
         except OSError:
             pass
-        raise _CLIError("unable to publish replay artifact", CLIExitCode.IO) from None
+        raise _CLIError(
+            "unable to publish replay artifact", CLIExitCode.IO,
+            path_reason=PathReason.DESTINATION_NOT_WRITABLE,
+        ) from None
 
 
 def _manifest(value: Mapping[str, Any]) -> ReproducibilityManifest:
@@ -637,8 +699,7 @@ def _batch_request(item: Any, base: Path | None) -> RunRequest:
 
 
 def _bundle_at(root_value: str):
-    _reject_remote(root_value)
-    root = Path(root_value)
+    root = _require_absolute_local(root_value, "evidence bundle root")
     return read_evidence_bundle(root / BUNDLE_INDEX_FILENAME, bundle_root=root)
 
 
@@ -655,8 +716,9 @@ def _bundle_summary(command: str, bundle: Any) -> dict[str, Any]:
 
 def _export(args: argparse.Namespace) -> tuple[bytes, bytes]:
     bundle = _bundle_at(args.source)
+    destination = _require_absolute_local(args.destination, "evidence destination")
     exported = export_evidence_bundle(
-        bundle, source_root=Path(args.source), destination=Path(args.destination),
+        bundle, source_root=Path(args.source), destination=destination,
     )
     value = _bundle_summary("export", exported)
     return _canonical(value), (
@@ -687,9 +749,11 @@ def _migrate(args: argparse.Namespace) -> tuple[bytes, bytes]:
         return canonical_migration_plan_bytes(plan), (
             f"planned lossless migration {plan.plan_id} ({transformations})\n"
         ).encode("utf-8")
+    source = _require_absolute_local(args.source, "migration source")
+    destination = _require_absolute_local(args.destination, "migration destination")
     result = execute_lossless_migration(
-        plan, source_descriptor=descriptor, source_path=Path(args.source),
-        destination=Path(args.destination),
+        plan, source_descriptor=descriptor, source_path=source,
+        destination=destination,
     )
     return canonical_migration_result_bytes(result), (
         f"migrated losslessly {result.plan_id} -> {result.target_sha256} "
@@ -742,6 +806,64 @@ def _replay_diagnostic(error: ReplayCompatibilityError) -> None:
     _diagnostic("; ".join(fields))
 
 
+def _path_reason(error: Exception) -> PathReason | None:
+    """Classify existing path-security failures without replacing their checks."""
+    if isinstance(error, _CLIError):
+        return error.path_reason
+    if isinstance(error, UnsupportedCompositionSourceError):
+        return PathReason.PATH_REMOTE_FORBIDDEN
+    if isinstance(error, CompositionRootEscapeError):
+        return PathReason.PATH_OUTSIDE_ALLOWED_ROOT
+    if isinstance(error, CompositionModuleNotFoundError):
+        return PathReason.PATH_NOT_FOUND
+    message = str(error).lower()
+    if isinstance(error, CompositionPathError):
+        if "absolute path" in message:
+            return PathReason.PATH_NOT_ABSOLUTE
+        if "root scenario path is invalid" in message:
+            return PathReason.PATH_OUTSIDE_ALLOWED_ROOT
+        if "does not exist" in message:
+            return PathReason.PATH_NOT_FOUND
+        return PathReason.PATH_UNSAFE
+    if isinstance(error, EvidenceDestinationError):
+        if "absolute path" in message:
+            return PathReason.PATH_NOT_ABSOLUTE
+        if "already exists" in message:
+            return PathReason.DESTINATION_ALREADY_EXISTS
+        if "parent" in message and ("does not exist" in message or "cannot be inspected" in message):
+            return PathReason.DESTINATION_PARENT_MISSING
+        if "invalid" in message or "must be a directory" in message or "symlink" in message:
+            return PathReason.INVALID_DESTINATION
+        return PathReason.DESTINATION_NOT_WRITABLE
+    if isinstance(error, EvidenceFilesystemError):
+        if "absolute path" in message:
+            return PathReason.PATH_NOT_ABSOLUTE
+        if "beneath the bundle root" in message:
+            return PathReason.PATH_OUTSIDE_ALLOWED_ROOT
+        if "does not exist" in message:
+            return PathReason.PATH_NOT_FOUND
+        return PathReason.PATH_UNSAFE
+    return None
+
+
+def _path_diagnostic(reason: PathReason, operation: str) -> None:
+    actions = {
+        PathReason.PATH_NOT_ABSOLUTE: "SUPPLY_ABSOLUTE_LOCAL_FILESYSTEM_PATH",
+        PathReason.PATH_REMOTE_FORBIDDEN: "SUPPLY_LOCAL_FILESYSTEM_PATH",
+        PathReason.PATH_OUTSIDE_ALLOWED_ROOT: "SUPPLY_PATH_WITHIN_ALLOWED_ROOT",
+        PathReason.PATH_NOT_FOUND: "SUPPLY_EXISTING_LOCAL_PATH",
+        PathReason.PATH_UNSAFE: "SUPPLY_SAFE_LOCAL_FILESYSTEM_PATH",
+        PathReason.INVALID_DESTINATION: "SUPPLY_SAFE_ABSENT_DESTINATION",
+        PathReason.DESTINATION_ALREADY_EXISTS: "SUPPLY_ABSENT_DESTINATION",
+        PathReason.DESTINATION_PARENT_MISSING: "SUPPLY_DESTINATION_WITH_EXISTING_PARENT",
+        PathReason.DESTINATION_NOT_WRITABLE: "SUPPLY_WRITABLE_DESTINATION_PARENT",
+    }
+    _diagnostic(
+        f"code={reason.value}; category=FILESYSTEM_TRUST_BOUNDARY; operation={operation}; "
+        f"path_kind=local_filesystem; next_action={actions[reason]}"
+    )
+
+
 def _mapped(error: Exception) -> CLIExitCode:
     if isinstance(error, (UnsupportedReplayContractError, ReplayCompatibilityError)):
         return CLIExitCode.REPLAY_COMPATIBILITY
@@ -784,12 +906,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         _write(machine if args.json else human)
         return int(code)
     except _CLIError as error:
-        _diagnostic(str(error))
+        reason = _path_reason(error)
+        if reason is not None:
+            _path_diagnostic(reason, getattr(locals().get("args"), "command", "cli"))
+        else:
+            _diagnostic(str(error))
         return int(error.code)
     except Exception as error:
         code = _mapped(error)
         if isinstance(error, ReplayCompatibilityError):
             _replay_diagnostic(error)
+            return int(code)
+        reason = _path_reason(error)
+        if reason is not None:
+            _path_diagnostic(reason, getattr(locals().get("args"), "command", "cli"))
             return int(code)
         if code is CLIExitCode.INTERNAL:
             message = "unexpected internal error"
