@@ -8,8 +8,9 @@ from .errors import RedactionConfigurationError
 
 
 DEFAULT_SECRET_KEYS = frozenset({
-    "access_key", "api_key", "authorization", "passwd", "password",
-    "private_key", "secret", "token",
+    "access_key", "access_token", "api-key", "api_key", "apikey",
+    "authorization", "client_secret", "credential", "passwd", "password",
+    "private_key", "refresh_token", "secret", "token",
 })
 
 

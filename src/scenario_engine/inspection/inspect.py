@@ -102,6 +102,9 @@ def inspect_result(target: ScenarioResult | ArtifactReadModel) -> InspectionDocu
                     "scenario_id": value["scenario_id"]}
     else:
         raise UnsupportedInspectionTargetError("inspect_result requires ScenarioResult or v1 result read model")
+    # Inspection is a consumer presentation boundary. Redact a detached
+    # projection; never alter the result or its canonical source bytes.
+    value = redact_mapping(value, validate_redacted_keys(None))
     manifest = value["manifest"]
     provenance = value.get("provenance")
     return _document("v1_result", (

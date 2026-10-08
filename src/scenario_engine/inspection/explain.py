@@ -9,6 +9,7 @@ from scenario_engine.suite import ArtifactOrigin, ArtifactReadModel
 
 from .errors import UnsupportedInspectionTargetError
 from .models import EvidenceAvailability, ExplanationRecord, MAX_EXPLANATION_RECORDS
+from .redaction import redact_mapping, validate_redacted_keys
 
 
 def explain_result(target: ScenarioResult | ArtifactReadModel) -> tuple[ExplanationRecord, ...]:
@@ -18,6 +19,9 @@ def explain_result(target: ScenarioResult | ArtifactReadModel) -> tuple[Explanat
         value = target.payload
     else:
         raise UnsupportedInspectionTargetError("explain_result requires ScenarioResult or v1 result read model")
+    # Explanation details are consumer-visible projections of recorded state.
+    # Redact only this detached projection, preserving canonical evidence.
+    value = redact_mapping(value, validate_redacted_keys(None))
     scenario_id = value["scenario_id"]
     result: list[ExplanationRecord] = []
     for index, history in enumerate(value["history"]):
