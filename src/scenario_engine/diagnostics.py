@@ -35,7 +35,9 @@ def bounded_text(value: object, *, limit: int = MAX_DIAGNOSTIC_FIELD_CHARS) -> s
     return _SPACE.sub(" ", text.replace("\x00", "")).strip()[:limit]
 
 
-def semantic_address(*components: tuple[str, str]) -> str | None:
+def semantic_address(
+    *components: tuple[str, str], activate_actor: bool = False,
+) -> str | None:
     """Produce a bounded canonical scenario.semantic-address/1 address."""
     if not components or len(components) > MAX_SEMANTIC_ADDRESS_DEPTH:
         return None
@@ -45,8 +47,10 @@ def semantic_address(*components: tuple[str, str]) -> str | None:
             return None
         kind, identifier = component
         if (not isinstance(kind, str) or not isinstance(identifier, str)
-                or kind in _RESERVED_KINDS
-                or (kind not in _STANDARD_KINDS and _EXTENSION_KIND.fullmatch(kind) is None)
+                or (kind in _RESERVED_KINDS and not (activate_actor and kind == "actor"))
+                or (kind not in _STANDARD_KINDS
+                    and not (activate_actor and kind == "actor")
+                    and _EXTENSION_KIND.fullmatch(kind) is None)
                 or not identifier or identifier in {".", ".."}):
             return None
         try:

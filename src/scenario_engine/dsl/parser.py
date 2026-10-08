@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 import re
+import unicodedata
 from types import MappingProxyType
 from typing import Any, Mapping
 
@@ -14,8 +15,8 @@ from yaml.resolver import Resolver
 from scenario_engine.values import MISSING, normalize
 from scenario_engine.diagnostics import semantic_address
 
-from .errors import DSLParseError, DSLSchemaError, UnsupportedDSLVersionError
-from .models import ScenarioDocument, StepDocument
+from .errors import DSLParseError, DSLResourceLimitError, DSLSchemaError, UnsupportedDSLVersionError
+from .models import ActorDocument, ScenarioDocument, ScenarioDocumentV2, StepDocument
 
 
 _REQUIRED_TOP_KEYS = {"dsl_version", "scenario", "clock", "initial_state", "steps"}
@@ -28,6 +29,11 @@ _EXPRESSION_OPERATORS = {
     "$lt", "$lte", "$gt", "$gte", "$and", "$or", "$not", "$len", "$scope",
 }
 _GENERATOR_OPERATORS = {"$int", "$id", "$literal", "$plugin"}
+MAX_ACTORS = 32
+MAX_STEPS_PER_ACTOR = 256
+MAX_TOTAL_DECLARED_STEPS = 4096
+_V2_REQUIRED_TOP_KEYS = {"dsl_version", "scenario", "clock", "initial_state", "actors"}
+_V2_TOP_KEYS = _V2_REQUIRED_TOP_KEYS | {"resources", "validators", "constraints", "invariants", "oracle"}
 
 
 class _DSLLoader(yaml.SafeLoader):
@@ -463,14 +469,31 @@ def _target(value: Any, path: str) -> Mapping[str, Any]:
     return MappingProxyType({"subflow": target["subflow"], "with": _with(target.get("with", {}), path + ".with")})
 
 
-def _parse_node(raw: Any, path: str, seen: set[str]) -> StepDocument:
+def _canonical_identifier(value: Any, path: str, *, semantic_path: str | None = None) -> str:
+    _symbol(value, path, semantic_path=semantic_path)
+    try:
+        result = unicodedata.normalize("NFC", value)
+    except (TypeError, UnicodeError):
+        _fail(path, "identifier is not valid Unicode", semantic_path=semantic_path)
+    if result in {".", ".."}:
+        _fail(path, "identifier may not be . or ..", semantic_path=semantic_path)
+    return result
+
+
+def _parse_node(
+    raw: Any, path: str, seen: set[str], *, actor_id: str | None = None,
+) -> StepDocument:
     node = _mapping(raw, path)
     _only_keys(node, _NODE_KEYS, path)
     if "id" not in node or "transition" not in node:
         _fail(path, "id and transition are required")
-    step_id = node["id"]
+    step_id = (_canonical_identifier(node["id"], path + ".id") if actor_id is not None
+               else node["id"])
     _symbol(step_id, path + ".id")
-    step_path = semantic_address(("step", step_id))
+    step_path = (semantic_address(("actor", actor_id), ("step", step_id), activate_actor=True)
+                 if actor_id is not None else semantic_address(("step", step_id)))
+    if step_path is None:
+        _fail(path + ".id", "identifier does not form a valid semantic address")
     if step_id in seen:
         _fail(path + ".id", f"duplicate step ID {step_id} (global node ID)")
     seen.add(step_id)
@@ -480,6 +503,8 @@ def _parse_node(raw: Any, path: str, seen: set[str]) -> StepDocument:
         _fail(path, "node must be exactly one executable, call, branch, or repeat node")
     transition = node["transition"]
     if transition is not None:
+        transition = (_canonical_identifier(transition, path + ".transition", semantic_path=step_path)
+                      if actor_id is not None else transition)
         _symbol(transition, path + ".transition", semantic_path=step_path)
     if controls:
         kind = controls[0]
@@ -552,7 +577,85 @@ def _parse_node(raw: Any, path: str, seen: set[str]) -> StepDocument:
     return StepDocument(step_id, MappingProxyType(dict(generate)), MappingProxyType(dict(derive)), MappingProxyType(dict(write)), tuple(emissions), timedelta(seconds=seconds), transition)
 
 
-def parse_yaml(text: str) -> ScenarioDocument:
+def _resource_limit(path: str, name: str, ceiling: int, received: int) -> None:
+    raise DSLResourceLimitError(
+        f"{path}: {name} inclusive ceiling {ceiling} exceeded",
+        expected=f"{name} <= {ceiling}", received=str(received),
+        remediation="reduce the DSL 2 declarations to the public inclusive ceiling",
+        details={"limit": name, "ceiling": ceiling, "received": received},
+    )
+
+
+def _parse_v2(root: Mapping[str, Any]) -> ScenarioDocumentV2:
+    _only_keys(root, _V2_TOP_KEYS, "$")
+    missing = sorted(_V2_REQUIRED_TOP_KEYS - set(root))
+    if missing:
+        _fail("$", "missing required key(s): " + ", ".join(missing))
+    scenario_id = _canonical_identifier(root["scenario"], "$.scenario")
+    clock = _mapping(root["clock"], "$.clock")
+    _only_keys(clock, {"start"}, "$.clock")
+    if set(clock) != {"start"}: _fail("$.clock", "start is required")
+    reference = _parse_datetime(clock["start"], "$.clock.start")
+    initial_raw = _mapping(root["initial_state"], "$.initial_state")
+    initial = decode_semantic_value(initial_raw, "$.initial_state")
+    try: normalize(initial)
+    except (TypeError, ValueError) as error: _fail("$.initial_state", str(error))
+    actors_raw = root["actors"]
+    if not isinstance(actors_raw, list) or not actors_raw:
+        _fail("$.actors", "expected non-empty ordered list")
+    if len(actors_raw) > MAX_ACTORS:
+        _resource_limit("$.actors", "MAX_ACTORS", MAX_ACTORS, len(actors_raw))
+    actors: list[ActorDocument] = []
+    actor_addresses: set[str] = set()
+    total = 0
+    for actor_index, raw_actor in enumerate(actors_raw):
+        path = f"$.actors[{actor_index}]"; actor = _mapping(raw_actor, path)
+        _only_keys(actor, {"id", "steps", "subflows"}, path)
+        if not {"id", "steps"} <= set(actor): _fail(path, "id and steps are required")
+        actor_id = _canonical_identifier(actor["id"], path + ".id")
+        actor_address = semantic_address(("actor", actor_id), activate_actor=True)
+        if actor_address is None: _fail(path + ".id", "identifier does not form a valid semantic address")
+        if actor_address in actor_addresses:
+            _fail(path + ".id", f"duplicate canonical actor ID {actor_id}", semantic_path=actor_address)
+        actor_addresses.add(actor_address)
+        steps_raw = actor["steps"]
+        if not isinstance(steps_raw, list) or not steps_raw: _fail(path + ".steps", "expected non-empty ordered list")
+        seen: set[str] = set()
+        steps = tuple(_parse_node(item, f"{path}.steps[{index}]", seen, actor_id=actor_id)
+                      for index, item in enumerate(steps_raw))
+        subflows_raw = _mapping(actor.get("subflows", {}), path + ".subflows")
+        if "subflows" in actor and not subflows_raw: _fail(path + ".subflows", "declared subflow mapping must be non-empty")
+        subflows: dict[str, tuple[StepDocument, ...]] = {}
+        subflow_ids: set[str] = set()
+        for raw_name, raw_flow in subflows_raw.items():
+            name = _canonical_identifier(raw_name, path + ".subflows key")
+            if name in subflow_ids: _fail(path + ".subflows", f"duplicate canonical subflow ID {name}")
+            subflow_ids.add(name)
+            definition = _mapping(raw_flow, f"{path}.subflows.{name}")
+            _only_keys(definition, {"steps"}, f"{path}.subflows.{name}")
+            body = definition.get("steps")
+            if not isinstance(body, list) or not body: _fail(f"{path}.subflows.{name}.steps", "expected non-empty ordered list")
+            subflows[name] = tuple(_parse_node(item, f"{path}.subflows.{name}.steps[{index}]", seen, actor_id=actor_id)
+                                   for index, item in enumerate(body))
+        count = len(seen)
+        if count > MAX_STEPS_PER_ACTOR:
+            _resource_limit(path, "MAX_STEPS_PER_ACTOR", MAX_STEPS_PER_ACTOR, count)
+        total += count
+        if total > MAX_TOTAL_DECLARED_STEPS:
+            _resource_limit("$.actors", "MAX_TOTAL_DECLARED_STEPS", MAX_TOTAL_DECLARED_STEPS, total)
+        actors.append(ActorDocument(actor_id, actor_address, steps, MappingProxyType(subflows)))
+    resources_raw = _mapping(root.get("resources", {}), "$.resources")
+    if "resources" in root and not resources_raw: _fail("$.resources", "declared resource mapping must be non-empty")
+    resources = MappingProxyType({name: _decode_resource(value, f"$.resources.{name}") for name, value in resources_raw.items()})
+    constraints = _parse_constraints(root.get("constraints", []))
+    invariants = _parse_invariants(root.get("invariants", []))
+    ordered = tuple(sorted(actors, key=lambda item: item.address.encode("utf-8")))
+    return ScenarioDocumentV2(2, scenario_id, reference, MappingProxyType(dict(initial)), ordered,
+                              resources, _parse_validators(root.get("validators", [])),
+                              constraints, invariants, _parse_oracle(root.get("oracle")))
+
+
+def parse_yaml(text: str) -> ScenarioDocument | ScenarioDocumentV2:
     _reject_ambiguous_yaml_constructs(text)
     try:
         loaded = yaml.load(text, Loader=_DSLLoader)
@@ -566,6 +669,12 @@ def parse_yaml(text: str) -> ScenarioDocument:
             received="malformed YAML", remediation="correct the YAML syntax",
         ) from None
     root = _mapping(loaded, "$")
+    if root.get("dsl_version") == 2 and not isinstance(root.get("dsl_version"), bool):
+        if "steps" in root:
+            raise UnsupportedDSLVersionError(
+                "$.dsl_version: DSL 1 root steps cannot be mixed with DSL 2"
+            )
+        return _parse_v2(root)
     _only_keys(root, _TOP_KEYS, "$")
     missing = sorted(_REQUIRED_TOP_KEYS - set(root))
     if missing:

@@ -48,14 +48,14 @@ def _step_payload(step: StepDocument) -> Mapping[str, Any]:
 
 
 def _document(value: str | ScenarioDocument | CompiledScenario) -> ScenarioDocument:
-    from .dsl.models import CompiledScenario, ScenarioDocument
+    from .dsl.models import CompiledScenario, CompiledScenarioV2, ScenarioDocument, ScenarioDocumentV2
     from .dsl.parser import parse_yaml
 
     if isinstance(value, str):
         return parse_yaml(value)
-    if isinstance(value, CompiledScenario):
+    if isinstance(value, (CompiledScenario, CompiledScenarioV2)):
         return value.document
-    if isinstance(value, ScenarioDocument):
+    if isinstance(value, (ScenarioDocument, ScenarioDocumentV2)):
         return value
     raise TypeError("scenario must be YAML text, ScenarioDocument, or CompiledScenario")
 
@@ -65,6 +65,25 @@ def canonical_scenario_payload(
 ) -> Mapping[str, Any]:
     """Return the JSON-compatible semantic payload of a validated scenario."""
     document = _document(scenario)
+    if document.dsl_version == 2:
+        payload = {
+            "actors": [{
+                "id": actor.actor_id,
+                "steps": [_step_payload(step) for step in actor.steps],
+                **({"subflows": {name: {"steps": [_step_payload(step) for step in actor.subflows[name]]}
+                                  for name in sorted(actor.subflows)}} if actor.subflows else {}),
+            } for actor in document.actors],
+            "clock": {"start": document.reference_clock_start},
+            "dsl_version": 2,
+            "initial_state": document.initial_state,
+            "scenario": document.scenario_id,
+        }
+        if document.resources: payload["resources"] = _canonical_node(document.resources)
+        if document.validators: payload["validators"] = _canonical_node(document.validators)
+        if document.constraints: payload["constraints"] = _canonical_node(document.constraints)
+        if document.invariants: payload["invariants"] = _canonical_node(document.invariants)
+        if document.oracle is not None: payload["oracle"] = _canonical_node(document.oracle)
+        return normalize(payload)
     payload = {
         "clock": {"start": document.reference_clock_start},
         "dsl_version": document.dsl_version,

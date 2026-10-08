@@ -26,7 +26,8 @@ from scenario_engine.plugins import (
 )
 
 from .compiler import compile_constraint, compile_document, compile_expression, compile_scoped_sequence
-from .models import CompiledScenario
+from .errors import UnsupportedDSL2ExecutionError
+from .models import CompiledScenario, CompiledScenarioV2
 from .parser import parse_yaml
 
 
@@ -174,6 +175,12 @@ def _execute(scenario, root_seed, run_index, locale, inputs, plugins=None):
 
 
 def run_scenario(scenario: CompiledScenario,root_seed,run_index=0,locale="C",inputs=None,plugins=None):
+    if isinstance(scenario, CompiledScenarioV2):
+        raise UnsupportedDSL2ExecutionError(
+            "DSL 2 execution is not implemented in Phase 5.1",
+            expected="validated DSL 2 definition only", received="run request",
+            remediation="wait for the separately authorized Engine 2 scheduler checkpoint",
+        )
     return _execute(scenario,root_seed,run_index,locale,inputs,plugins)[0]
 
 

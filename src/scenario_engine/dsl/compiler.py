@@ -17,7 +17,7 @@ from scenario_engine.expressions import resolve_semantic_path
 from scenario_engine.plugins import PluginRegistry, invoke_plugin
 
 from .errors import DSLCompilationError
-from .models import CompiledScenario, CompiledStep, ScenarioDocument
+from .models import CompiledScenario, CompiledScenarioV2, CompiledStep, ScenarioDocument, ScenarioDocumentV2
 from .parser import decode_semantic_value
 
 
@@ -200,6 +200,16 @@ def _validate_control(document):
     for name in sorted(graph): visit(name)
 
 
+def _validate_actor(actor):
+    _validate_sequence(actor.steps, f"actor {actor.actor_id}.steps")
+    for name, steps in actor.subflows.items():
+        _validate_sequence(steps, f"actor {actor.actor_id}.subflows.{name}.steps")
+    class Scope:
+        subflows = actor.subflows
+        steps = actor.steps
+    _validate_control(Scope())
+
+
 def _compile_step(step, resources, scope=None, plugins=None, state=None):
     if step.control_kind is not None:
         return step
@@ -217,6 +227,12 @@ def _compile_step(step, resources, scope=None, plugins=None, state=None):
 
 def compile_document(document: ScenarioDocument, resources=None, plugins=None,
                      state=None) -> CompiledScenario:
+    if isinstance(document, ScenarioDocumentV2):
+        for actor in document.actors: _validate_actor(actor)
+        return CompiledScenarioV2(
+            document.scenario_id, document.reference_clock_start, document.initial_state,
+            document.actors, document, resources,
+        )
     _validate_sequence(document.steps, "$.steps")
     for name, steps in document.subflows.items(): _validate_sequence(steps, f"$.subflows.{name}.steps")
     _validate_control(document)

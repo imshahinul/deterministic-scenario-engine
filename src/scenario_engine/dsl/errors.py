@@ -19,10 +19,11 @@ class DSLError(ScenarioEngineError, ValueError):
         received: str | None = None,
         remediation: str | None = None,
         diagnostic_message: str | None = None,
+        details: dict[str, str | int | bool] | None = None,
     ) -> None:
         self.human_diagnostic = HumanDiagnostic(
             self.diagnostic_code, self.diagnostic_category, diagnostic_message or message,
-            semantic_path, expected, received, remediation,
+            semantic_path, expected, received, remediation, details,
         )
         super().__init__(message)
 
@@ -50,3 +51,17 @@ class DSLCompilationError(DSLError):
 
     diagnostic_code = "DSL_SEMANTIC_ERROR"
     diagnostic_category = "DSL_SEMANTIC"
+
+
+class DSLResourceLimitError(DSLSchemaError):
+    """A public inclusive DSL 2 declaration ceiling was exceeded."""
+
+    diagnostic_code = "DSL_RESOURCE_LIMIT_EXCEEDED"
+    diagnostic_category = "RESOURCE_BOUND"
+
+
+class UnsupportedDSL2ExecutionError(DSLError):
+    """DSL 2 validated successfully but execution is not implemented in Phase 5.1."""
+
+    diagnostic_code = "DSL2_EXECUTION_UNSUPPORTED"
+    diagnostic_category = "EXECUTION_COMPATIBILITY"

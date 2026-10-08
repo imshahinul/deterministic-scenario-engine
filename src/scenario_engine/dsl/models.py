@@ -53,6 +53,32 @@ class ScenarioDocument:
 
 
 @dataclass(frozen=True, slots=True)
+class ActorDocument:
+    actor_id: str
+    address: str
+    steps: tuple[StepDocument, ...]
+    subflows: Mapping[str, tuple[StepDocument, ...]] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class ScenarioDocumentV2:
+    """Validated immutable DSL 2 actor declarations; not an execution model."""
+
+    dsl_version: int
+    scenario_id: str
+    reference_clock_start: datetime
+    initial_state: Mapping[str, Any]
+    actors: tuple[ActorDocument, ...]
+    resources: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
+    validators: tuple[Mapping[str, Any], ...] = ()
+    constraints: tuple[Mapping[str, Any], ...] = ()
+    invariants: tuple[Mapping[str, Any], ...] = ()
+    oracle: Mapping[str, Any] | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class CompiledStep:
     spec: StepSpec
     transition: str | None
@@ -72,3 +98,15 @@ class CompiledScenario:
     document: ScenarioDocument
     resources: Any = None
     subflows: Mapping[str, tuple[CompiledStep | StepDocument, ...]] = field(default_factory=lambda: MappingProxyType({}))
+
+
+@dataclass(frozen=True, slots=True)
+class CompiledScenarioV2:
+    """Statically validated DSL 2 foundation with no executable scheduler state."""
+
+    scenario_id: str
+    reference_clock_start: datetime
+    initial_state: Mapping[str, Any]
+    actors: tuple[ActorDocument, ...]
+    document: ScenarioDocumentV2
+    resources: Any = None

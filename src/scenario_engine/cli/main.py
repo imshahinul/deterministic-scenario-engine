@@ -32,7 +32,8 @@ from scenario_engine.diagnostics import (
 )
 from scenario_engine.definition_diff import compare_definitions, render_definition_diff
 from scenario_engine.dsl import (
-    DSLError, compile_document, parse_yaml, replay_scenario, run_scenario,
+    CompiledScenarioV2, DSLError, UnsupportedDSL2ExecutionError,
+    compile_document, parse_yaml, replay_scenario, run_scenario,
 )
 from scenario_engine.errors import ScenarioEngineError
 from scenario_engine.evidence import (
@@ -720,6 +721,14 @@ def _require_replay_compatibility(envelope: RunManifestEnvelope, scenario: str) 
             migration=ReplayCompatibilityReason.MIGRATION_UNAVAILABLE,
         )
     compiled = compile_document(parse_yaml(scenario))
+    if isinstance(compiled, CompiledScenarioV2):
+        raise ReplayCompatibilityError(
+            "DSL 2 replay is unsupported in Phase 5.1",
+            reason=ReplayCompatibilityReason.ENGINE_VERSION_UNSUPPORTED,
+            artifact_contract=envelope.schema_version, expected="DSL 1 / Engine 1 replay",
+            received="DSL 2 validation-only definition", remediation="USE_SUPPORTED_ENGINE",
+            migration=ReplayCompatibilityReason.MIGRATION_UNAVAILABLE,
+        )
     if envelope.root_scenario_identity != compiled.scenario_id:
         raise ReplayCompatibilityError(
             "root_scenario_identity mismatch",
@@ -1146,6 +1155,8 @@ def _emit_machine(diagnostic: HumanDiagnostic, code: CLIExitCode) -> None:
 
 
 def _mapped(error: Exception) -> CLIExitCode:
+    if isinstance(error, UnsupportedDSL2ExecutionError):
+        return CLIExitCode.EXECUTION
     if isinstance(error, TraceViewError):
         return CLIExitCode.SECURITY_OR_BOUND if error.code in {"TRACE_INPUT_TOO_LARGE", "TRACE_OUTPUT_TOO_LARGE"} else CLIExitCode.VALIDATION
     if isinstance(error, (UnsupportedReplayContractError, ReplayCompatibilityError)):
