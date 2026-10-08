@@ -290,21 +290,108 @@ identity, and a canonical NFC Unicode actor identifier.
 ## 8. Schedule identity and replay authority
 
 The independently versioned schedule evidence contract is
-`scenario.schedule/1`. Its canonical payload contains the scheduler contract and
-seed, scenario/input/resource identities, execution compatibility coordinates,
-initial actor set, and ordered selection records. Its `schedule_hash` is the
-lowercase SHA-256 of canonical schedule payload bytes with the `schedule_hash`
-field omitted. This hash is the canonical schedule identity; a seed alone is not
-a schedule identity.
+`scenario.schedule/1`. The exact top-level wire object has these fields and no
+others:
 
-Exact Engine 2 replay requires the exact scenario source/identity and canonical
-hash, explicit inputs/resources, generation root seed, schedule seed, run index,
-locale, reference clock, actor identities, ordered recorded ready sets and actor
-selections, scheduler contract, engine and DSL versions, RNG/ID/generator/plugin
-versions, schedule contract/hash, and every other required execution coordinate.
-Replay recomputes readiness and the `scenario.scheduler/1` choice at every
-selection, verifies it against the recorded selection before executing that
-transition, then verifies the resulting schedule hash and canonical result.
+```json
+{"actors":[],"contract":"scenario.schedule/1","execution":{"dsl_version":2,"engine_version":"2.0.0","generator_versions":{},"id_algorithm_version":"scenario.logical-id/1","locale":"C","reference_clock_start":{"$type":"datetime","value":"2026-01-01T00:00:00.000000+00:00"},"rng_algorithm_version":"scenario.rng/1","root_seed":0},"input_resource_hashes":{},"records":[],"run_index":0,"scenario_hash":"0000000000000000000000000000000000000000000000000000000000000000","schedule_hash":"0000000000000000000000000000000000000000000000000000000000000000","schedule_seed":0,"scheduler_contract":"scenario.scheduler/1","terminal":{"classification":"SUCCESS","failure":null}}
+```
+
+The shown algorithm-version strings are illustrative schema values; producers
+must record the exact frozen constants used by execution. `contract` and
+`scheduler_contract` are the exact strings shown. `scenario_hash` and
+`schedule_hash` are exactly 64 lowercase hexadecimal ASCII characters.
+`input_resource_hashes` is the exact canonical string-to-string mapping used by
+the scheduler. `run_index` is a nonnegative integer excluding `bool` and
+`schedule_seed` is an integer excluding `bool` in `0..2^64-1`. `actors` is the
+nonempty, unique declared actor set in canonical-address UTF-8 byte order, with
+at most 32 entries.
+
+`execution` has exactly `dsl_version`, `engine_version`, `generator_versions`,
+`id_algorithm_version`, `locale`, `reference_clock_start`,
+`rng_algorithm_version`, and `root_seed`. DSL is exact integer `2`, engine is
+exact string `2.0.0`, locale is exact string `C`, reference clock is a
+timezone-aware datetime normalized to UTC, root seed is a string or integer
+excluding `bool`, generator versions are a canonical string-to-string mapping,
+and the RNG and ID versions are the exact nonempty constants used by the actor
+kernel. These are schedule replay coordinates, not a public Manifest/2 and not a
+change to the released Engine 1.0.0 value.
+
+Each member of `records`, in list order, has exactly:
+
+```json
+{"committed_history_length":0,"logical_clock":{"$type":"datetime","value":"2026-01-01T00:00:00.000000+00:00"},"outcome":"COMMITTED","ready_actors":["scenario:/actor/alpha"],"scheduler_digest":"0000000000000000000000000000000000000000000000000000000000000000","selected_actor":"scenario:/actor/alpha","selection_ordinal":0}
+```
+
+`selection_ordinal` is the record's zero-based list position and is in
+`0..65,535`. `ready_actors` is the nonempty unique ready subset in canonical
+actor-address UTF-8 byte order. `selected_actor` is a member of that set.
+`committed_history_length` is the nonnegative count immediately before the
+decision, not an alias for ordinal. `logical_clock` is the shared clock
+immediately before the decision. `scheduler_digest` is the exact lowercase
+SHA-256 digest returned by `scenario.scheduler/1` for those coordinates.
+`outcome` is exact `COMMITTED` or `FAILED`; every record except possibly the
+last is `COMMITTED`. A record is created after selection and before transition
+execution, so a failed attempted selection remains `FAILED` and creates no
+committed history, clock advance, artifact, or actor-position advance.
+
+`terminal` has exactly `classification` and `failure`. Successful completion is
+exactly `{"classification":"SUCCESS","failure":null}` and includes empty
+completed schedules when all validated actors are initially terminal. Failed
+execution is exact classification `FAILED`; `failure` then has exactly
+`actor`, `code`, and `selection_ordinal`, identifying the final failed record.
+The code is the stable nonempty exception `code` when present, otherwise the
+exception class name; no message, value, traceback, path, seed, preimage, or
+secret-bearing detail is recorded. Scheduler stall and resource-limit failures
+that occur before a selection record can be created are execution failures and
+do not produce a completed schedule artifact.
+
+The **schedule identity payload** is the complete top-level object with only
+`schedule_hash` omitted; all other fields, including terminal/failure evidence,
+are included. It is normalized once by DSE's existing semantic normalizer and
+serialized as UTF-8 JSON with sorted object keys, compact separators,
+`ensure_ascii=false`, and no trailing newline or prefix. `schedule_hash` is the
+lowercase hexadecimal encoding of SHA-256 over exactly those bytes. The complete
+artifact is the same canonical serialization after adding `schedule_hash`.
+Both identity bytes and complete artifact bytes must be at most 8,388,608 bytes
+before an artifact is accepted or returned. No partial or prefix artifact is a
+schedule. Identical coordinates and decisions therefore produce byte-identical
+artifacts and hashes; distinct seeds can legitimately produce the same actor
+choices but remain distinct identity payloads because the seed is included.
+A hash match alone proves neither execution validity nor successful replay.
+
+Readers accept bytes or UTF-8 text only, reject an input over the byte ceiling
+before JSON decoding, reject malformed UTF-8/JSON, non-finite numbers, duplicate
+keys, nesting deeper than 32, missing or unknown fields, invalid exact types,
+noncanonical actor addresses/order, unsupported contracts/versions, excessive
+records, ordinal/order inconsistencies, invalid terminal shape, and a corrupted
+hash. There is no unknown-field preservation, coercion, repair, migration,
+network retrieval, path interpretation, or executable hook. Validation is
+fail-closed and diagnostics name only the stable field, contract, or public
+limit; supplied values and hash preimages are not reflected.
+
+Exact internal Engine 2 replay requires the validated schedule, exact scenario,
+explicit inputs/resources, and plugin registry needed by the scenario. Before
+execution it verifies the contract/hash, scenario hash, resource hashes, run
+index, seed, initial actor set, and every execution-version coordinate. It then
+independently reconstructs routing/readiness and calls `scenario.scheduler/1` at
+every selection. Before executing each transition it compares record position,
+ordinal, ready set, selected actor, scheduler digest, committed-history length,
+and logical clock. It never executes merely because an actor was named by the
+record. Missing, extra, or reordered records fail closed at the first boundary
+before an unverified transition commits.
+
+Replay preflights record count against both
+`MAX_SCHEDULER_SELECTIONS == 65,536` and
+`MAX_REPLAY_SCHEDULER_SELECTIONS_VERIFIED == 65,536`, incrementally checks before
+each verification, and applies the same 4,096 routing-operation ceiling.
+Following execution it reconstructs a new schedule and compares canonical bytes,
+terminal/failure classification, selection order, committed history, final
+shared state, logical clock, actor terminal positions, and deterministic outcome
+classification. Failure replay must reproduce the same final failed selection
+and stable failure code without a partial commit. Source schedule objects are
+immutable and are never repaired or mutated. Exact replay returns only internal
+evidence; it does not publish Result/2, Manifest/2, or Suite Run/2.
 
 A mismatch in scenario, inputs/resources, actor set, ready set, selected actor,
 selection count, scheduler version, seed, or any other required coordinate fails
