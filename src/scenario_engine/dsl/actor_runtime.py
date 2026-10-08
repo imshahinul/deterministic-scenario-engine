@@ -98,6 +98,7 @@ class ActorSchedulingDecision:
     scheduler_digest: str
     committed_history_length: int
     logical_clock: datetime
+    outcome: str = "COMMITTED"
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +112,7 @@ class ActorExecutionOutcome:
     scheduling_decisions: tuple[ActorSchedulingDecision, ...]
     artifacts: tuple[Any, ...]
     classification: str
+    schedule: Any = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -241,12 +243,49 @@ def _view(control: _ActorControl, routed: _Routed | None = None) -> ActorControl
     )
 
 
-def _outcome(runner, controls, decisions, classification, routed=None) -> ActorExecutionOutcome:
+def _generator_versions(document) -> Mapping[str, str]:
+    from scenario_engine.manifest import GENERATOR_VERSIONS
+    requirements = dict(GENERATOR_VERSIONS)
+    for actor in document.actors:
+        for sequence in (actor.steps, *actor.subflows.values()):
+            for step in sequence:
+                for declaration in step.generate.values():
+                    if "$plugin" in declaration:
+                        body = declaration["$plugin"]
+                        prior = requirements.get(f"plugin:{body['name']}")
+                        if prior is not None and prior != body["version"]:
+                            raise ActorExecutionError("conflicting plugin version declarations")
+                        requirements[f"plugin:{body['name']}"] = body["version"]
+    return MappingProxyType({key: requirements[key] for key in sorted(requirements)})
+
+
+def _schedule(scenario, root_seed, schedule_seed, run_index, resources, controls, decisions,
+              classification, failure=None):
+    from scenario_engine.schedule import (
+        ScheduleArtifact, ScheduleExecution, ScheduleFailure, ScheduleRecord,
+    )
+    records = tuple(ScheduleRecord(
+        item.ordinal, item.ready_actors, item.selected_actor,
+        item.committed_history_length, item.logical_clock, item.scheduler_digest, item.outcome,
+    ) for item in decisions)
+    failed = None
+    if failure is not None:
+        code = getattr(failure, "code", type(failure).__name__)
+        failed = ScheduleFailure(decisions[-1].selected_actor, str(code), decisions[-1].ordinal)
+    return ScheduleArtifact(
+        canonical_scenario_hash(scenario), resources.hashes(), run_index, schedule_seed,
+        tuple(sorted(controls, key=str.encode)),
+        ScheduleExecution(root_seed, scenario.reference_clock_start, _generator_versions(scenario.document)),
+        records, classification, failed,
+    )
+
+
+def _outcome(runner, controls, decisions, classification, routed=None, schedule=None) -> ActorExecutionOutcome:
     routes = routed or {}
     return ActorExecutionOutcome(
         runner.state.snapshot(), runner.clock.current, runner.history.records,
         tuple(_view(control, routes.get(address)) for address, control in sorted(controls.items())),
-        tuple(decisions), tuple(runner.artifacts), classification,
+        tuple(decisions), tuple(runner.artifacts), classification, schedule,
     )
 
 
@@ -258,6 +297,7 @@ def execute_actors_internal(
     run_index: int = 0,
     inputs: Mapping[str, Any] | None = None,
     plugins: PluginRegistry | None = None,
+    _expected_schedule: Any = None,
 ) -> ActorExecutionOutcome:
     """Execute validated DSL 2 actors without exposing a public Engine 2 result."""
     if not isinstance(scenario, CompiledScenarioV2):
@@ -295,6 +335,26 @@ def execute_actors_internal(
     scenario_hash = canonical_scenario_hash(scenario)
     resource_hashes = resources.hashes()
 
+    if _expected_schedule is not None:
+        from scenario_engine.schedule import (
+            ENGINE2_EXECUTION_VERSION, ScheduleReplayMismatch, canonical_schedule_bytes,
+        )
+        expected_execution = _expected_schedule.execution
+        checks = (
+            ("scenario_hash", _expected_schedule.scenario_hash, scenario_hash),
+            ("input_resource_hashes", dict(_expected_schedule.input_resource_hashes), dict(resource_hashes)),
+            ("run_index", _expected_schedule.run_index, run_index),
+            ("schedule_seed", _expected_schedule.schedule_seed, schedule_seed),
+            ("actors", _expected_schedule.actors, tuple(sorted(declared, key=str.encode))),
+            ("execution.root_seed", expected_execution.root_seed, root_seed),
+            ("execution.reference_clock_start", expected_execution.reference_clock_start, scenario.reference_clock_start),
+            ("execution.generator_versions", dict(expected_execution.generator_versions), dict(_generator_versions(scenario.document))),
+            ("execution.engine_version", expected_execution.engine_version, ENGINE2_EXECUTION_VERSION),
+        )
+        for field, expected, received in checks:
+            if expected != received:
+                raise ScheduleReplayMismatch(field, "does not match replay coordinates")
+
     while True:
         state = runner.state.snapshot()
         routed = {
@@ -307,7 +367,11 @@ def execute_actors_internal(
                 terminal_controls = {
                     address: replace(control, frames=()) for address, control in controls.items()
                 }
-                return _outcome(runner, terminal_controls, decisions, "SUCCESS", routed)
+                schedule = _schedule(scenario, root_seed, schedule_seed, run_index, resources,
+                                     terminal_controls, decisions, "SUCCESS")
+                if _expected_schedule is not None and canonical_schedule_bytes(schedule) != canonical_schedule_bytes(_expected_schedule):
+                    raise ScheduleReplayMismatch("records", "record count or terminal outcome differs")
+                return _outcome(runner, terminal_controls, decisions, "SUCCESS", routed, schedule)
             raise ActorExecutionError("no actor is ready while a nonterminal actor remains", code="ACTOR_SCHEDULER_STALLED")
         if len(decisions) >= MAX_SCHEDULER_SELECTIONS:
             raise ActorExecutionError(
@@ -325,6 +389,17 @@ def execute_actors_internal(
             len(decisions), selected.selected_actor, route.step_address,
             selected.ready_actors, selected.digest, len(runner.history.records), runner.clock.current,
         )
+        if _expected_schedule is not None:
+            ordinal = len(decisions)
+            if ordinal >= len(_expected_schedule.records):
+                raise ScheduleReplayMismatch("records", "contains a missing record")
+            expected = _expected_schedule.records[ordinal]
+            actual = (ordinal, selected.ready_actors, selected.selected_actor,
+                      len(runner.history.records), runner.clock.current, selected.digest)
+            recorded = (expected.selection_ordinal, expected.ready_actors, expected.selected_actor,
+                        expected.committed_history_length, expected.logical_clock, expected.scheduler_digest)
+            if recorded != actual:
+                raise ScheduleReplayMismatch(f"records[{ordinal}]", "scheduler coordinates or decision differ")
         decisions.append(decision)
         actor = controls[selected.selected_actor].actor
         runner.address = ExecutionAddress(
@@ -345,7 +420,14 @@ def execute_actors_internal(
             runner.run_step(spec, validator if invariants else None)
         except Exception as error:
             # ScenarioRunner commits only after candidate construction and validation.
+            decisions[-1] = replace(decisions[-1], outcome="FAILED")
+            schedule = _schedule(scenario, root_seed, schedule_seed, run_index, resources,
+                                 controls, decisions, "FAILED", error)
             setattr(error, "actor_address", selected.selected_actor)
-            setattr(error, "internal_outcome", _outcome(runner, controls, decisions, "FAILED", routed))
+            setattr(error, "internal_outcome", _outcome(
+                runner, controls, decisions, "FAILED", routed, schedule,
+            ))
+            if _expected_schedule is not None and canonical_schedule_bytes(schedule) != canonical_schedule_bytes(_expected_schedule):
+                raise ScheduleReplayMismatch("terminal", "failure classification differs") from error
             raise
         controls[selected.selected_actor] = route.control
