@@ -26,7 +26,7 @@ PUBLIC_DOCS = (
 )
 PUBLIC_MANIFESTS = {
     "scenario_engine": (33, "f19f9c8ebe3fd5574550fea1fdefc5a20fa004a4913978e8bf5ab1e447278a50"),
-    "scenario_engine.suite": (44, "7db8a4edf260d1d16960203dfa43672d1d9cb8e4eed1624be87a9201ded59512"),
+    "scenario_engine.suite": (45, "2aa92ef099e841092afdfac9d8fbf7f2b5bd48898383b8810afdd85ed3116e98"),
     "scenario_engine.composition": (29, "689f1fecb3bbbe4822ce523e09084857f9da625a31b4b1e9bbc447d3bc425fe7"),
     "scenario_engine.matrix": (25, "90611e656a435284db4b92dac84e1aa4d6b55b5a2172094ed3fa8598c86f15b3"),
     "scenario_engine.batch": (32, "59876678a4f4349a66b6caff4583e3cf8eb02425e3c7fc2b47d047edab1ad834"),
@@ -38,7 +38,11 @@ PUBLIC_MANIFESTS = {
     "scenario_engine.evidence": (95, "4b3f258c47ea896d4455fb56262b415d6dfeaa7a791a59e23d94349171f8cb7b"),
     "scenario_engine.reference_packs": (4, "9b81eb1663ef5da3215de5fd93f47e96bb76be4305d3fb5c33376f5220a44c01"),
 }
-COMMANDS = ("validate", "run", "replay", "hash", "inspect", "explain", "diff", "matrix", "batch", "export", "verify", "migrate")
+COMMANDS = (
+    "validate", "scaffold", "run", "replay", "trace-view", "hash", "inspect",
+    "explain", "diff", "diff-definition", "impact", "matrix", "batch",
+    "compatibility-fixtures", "export", "verify", "migrate",
+)
 PHASE3_SCHEMAS = {
     "evidence.bundle/1", "evidence.entry/1", "evidence.relationship/1",
     "evidence.provenance/1", "evidence.adapter-capability/1",
@@ -162,7 +166,7 @@ def test_versions_publication_security_reference_and_links_are_frozen(tmp_path: 
     from scenario_engine.reference_packs import ecommerce_domain_pack, export_ecommerce_evidence
 
     result = run_scenario(compile_document(parse_yaml((ROOT / "examples/cart.yaml").read_text())), "phase3.11")
-    assert VERSION == "2.1.2" and ENGINE_VERSION == "1.0.0"
+    assert VERSION == "2.2.0" and ENGINE_VERSION == "1.0.0"
     assert result.manifest.engine_version == "1.0.0" and result.manifest.dsl_version == 1
     contract = CONTRACT.read_text()
     assert "current source distribution version=2.1.0" in contract

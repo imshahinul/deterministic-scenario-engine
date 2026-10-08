@@ -129,7 +129,7 @@ class Phase10DDocumentationExampleTests(unittest.TestCase):
         expected = text(ROOT / "docs/compatibility.md")
         self.assertEqual(
             sha256(expected.encode()).hexdigest(),
-            "0cf842858a5fe2a4fd9b6151158cb176e147f6a926ef5932e8f32cb35cfe0f96",
+            "2db31aeed53a7f6acc336801afc24bcf1201b203491d84b81e9a5fcca30070a1",
         )
 
 

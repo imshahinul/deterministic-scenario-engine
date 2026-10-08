@@ -23,8 +23,8 @@ intentionally internal.
 ```text
 scenario_engine count=33
 scenario_engine sha256=f19f9c8ebe3fd5574550fea1fdefc5a20fa004a4913978e8bf5ab1e447278a50
-scenario_engine.suite count=44
-scenario_engine.suite sha256=7db8a4edf260d1d16960203dfa43672d1d9cb8e4eed1624be87a9201ded59512
+scenario_engine.suite count=45
+scenario_engine.suite sha256=2aa92ef099e841092afdfac9d8fbf7f2b5bd48898383b8810afdd85ed3116e98
 scenario_engine.composition count=29
 scenario_engine.composition sha256=689f1fecb3bbbe4822ce523e09084857f9da625a31b4b1e9bbc447d3bc425fe7
 scenario_engine.matrix count=25
