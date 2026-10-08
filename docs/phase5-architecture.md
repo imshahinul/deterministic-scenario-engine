@@ -322,12 +322,98 @@ hash verification, secret redaction, and fail-closed unknown versions. Explicit
 Python plugins remain trusted and unsandboxed but receive no scheduler,
 filesystem, network, process, environment, or wall-clock authority from Phase 5.
 
-Before Phase 5.1 implementation, public hard ceilings must be frozen for actor
-count, transitions, control-routing work per selection, schedule records,
-schedule bytes, result bytes, semantic-address depth/bytes, diagnostic details,
-and replay verification work. Defaults may be lower than hard ceilings. Limit
-failure is deterministic, bounded, redacted, and non-partial. No implementation
-may ship with unbounded actor, schedule, history, or canonicalization growth.
+### 13.1 Phase 5 hard ceilings
+
+The following values are public contract commitments for DSL 2 and Engine 2.
+Every ceiling is an independent, inclusive maximum: a value equal to its ceiling
+is permitted, while a value greater than any applicable ceiling is rejected.
+MiB means 1,048,576 bytes. Counts are exact nonnegative integer counts and byte
+counts are over the complete canonical compact UTF-8 serialization named below.
+
+| Public limit | Inclusive ceiling | Unit and counted quantity | Enforcement boundary |
+|---|---:|---|---|
+| `MAX_ACTORS` | 32 | actor declarations in one DSL 2 scenario | Static parse/model validation, before compilation or execution |
+| `MAX_STEPS_PER_ACTOR` | 256 | statically declared flow nodes owned by one actor | Static parse/model validation |
+| `MAX_TOTAL_DECLARED_STEPS` | 4,096 | statically declared flow nodes summed across all actors | Static parse/model validation |
+| `MAX_SCHEDULER_SELECTIONS` | 65,536 | attempted scheduler selections in one run, including a final failed attempted selection | Dynamic, checked before creating the next selection record or executing its transition |
+| `MAX_CONTROL_ROUTING_OPERATIONS_PER_SELECTION` | 4,096 | deterministic control-routing operations used to locate one selected actor's next executable step | Dynamic, checked during routing and before transition execution |
+| `MAX_CANONICAL_SCHEDULE_BYTES` | 8,388,608 (8 MiB) | canonical `scenario.schedule/1` payload bytes used for schedule identity, with `schedule_hash` omitted as specified in Section 8 | Checked during bounded construction and before acceptance, publication, or replay use |
+| `MAX_CANONICAL_RESULT_BYTES` | 33,554,432 (32 MiB) | complete canonical `scenario.result/2` bytes | Checked during bounded construction and before a result is returned or published |
+| `MAX_REPLAY_SCHEDULER_SELECTIONS_VERIFIED` | 65,536 | recorded scheduler selections verified by one exact replay operation | Replay preflight where determinable, and incrementally before verification of each next record |
+
+A **declared flow node** is one uniquely identified node written in an actor's
+root flow or actor-owned subflow, whether the node is an executable step or a
+control node such as a call, branch, or repeat. A declaration is counted exactly
+once in its owning actor and once in the scenario aggregate. Declaration counts
+do not count repeat iterations, subflow invocations, scheduler selections,
+committed history events, failed attempts, or any other runtime event. Sharing or
+invoking one declared subflow multiple times does not duplicate its declaration
+count. No actor may borrow unused capacity from another: both the per-actor and
+aggregate ceilings apply.
+
+A **scheduler selection** is one scheduler decision record, starting at ordinal
+zero, whether its selected transition later commits or fails. It is not a
+declared step count: loops and repeated visits can cause many selections of the
+same declared step. A **control-routing operation** is one deterministic routing
+action: inspecting a flow node, evaluating one ordered branch condition,
+entering or returning from a subflow invocation, initiating or advancing one
+repeat iteration, or following one control transition. Implementations must use
+this logical definition and cannot make the count depend on Python operations,
+CPU instructions, elapsed time, recursion strategy, caching, or host behavior.
+The routing counter resets for each selection; the scheduler-selection counters
+do not reset during a run or replay.
+
+Static limits are rejected before execution and before allocation proportional
+to an over-limit declaration where practical. Dynamic limits are checked before
+the operation that would make the count exceed the ceiling. Schedule and result
+byte limits must be enforced with bounded accounting during construction, not by
+first creating an unbounded object. If several limits would reject at the same
+defined validation point, the eventual contract must freeze deterministic error
+precedence.
+
+All resource-limit failures fail closed through the existing
+`scenario.error/1` envelope with a stable reviewed code, safe semantic path when
+available, applicable public limit name and ceiling, and no secret-bearing value.
+There is no silent truncation, clamping, actor omission, schedule-prefix success,
+partial result, partial replay success, or partial publication. A failed
+transition retains the atomicity rules in Sections 5 and 6. Lower explicit
+operation limits may be offered only when their names, values, and failure
+behavior are public and deterministic; no default, configuration, plugin, API,
+CLI option, or environment value may raise a hard ceiling or do so silently.
+
+### 13.2 Preserved limits and compatibility
+
+The existing `scenario.semantic-address/1` maximum depth of 32
+kind/identifier pairs and maximum canonical serialized length of 2,048 UTF-8
+bytes remain unchanged. Actor activation does not increase, weaken, reinterpret,
+or silently truncate either limit; an actor or actor-step address must satisfy
+the same normalization and canonicality rules as every other address.
+
+The existing `scenario.error/1` ceilings remain unchanged: one canonical error
+envelope is at most 1 MiB, nesting depth is at most 32, and `details` contains at
+most 1,000 entries. Existing narrower field, detail-key, and presentation bounds,
+deterministic ordering, truncation disclosure where the frozen diagnostic
+contract permits presentation truncation, and secret redaction remain
+authoritative. Phase 5 requires no additional diagnostic ceiling.
+
+DSL 1 remains on its frozen parser/compiler and Engine 1 path. In particular,
+its repeat maximum of 100, its accepted declarations, and its existing
+execution, history, artifact, provenance, reader, canonicalization, CLI, and
+result/evidence limits retain their current meanings. The new actor, declaration,
+selection, routing, schedule-byte, Result/2-byte, and replay-verification ceilings
+apply only to DSL 2/Engine 2 contracts and cannot reject an input previously
+supported by DSL 1. Existing cross-product limits remain independently
+applicable where their frozen contract consumes an Engine 2 artifact; wrapping,
+inspection, trace rendering, suite orchestration, or evidence export cannot
+increase a native Phase 5 ceiling.
+
+These finite ceilings bound parser/model allocation, scheduler work, cyclic or
+adversarial control routing, schedule-evidence growth, canonicalization memory,
+result retention, and replay verification of untrusted evidence. They prevent a
+small declaration, repeat, or hostile schedule from causing unbounded CPU or
+memory consumption while keeping counts independent of machine speed and host
+configuration. Runtime-dependent limits are architectural constraints only in
+this amendment; no scheduler or other Phase 5 implementation is authorized.
 
 The engine performs no network calls, remote retrieval, runtime LLM calls,
 distributed coordination, subprocess scheduling, dynamic code loading from DSL,
@@ -351,7 +437,7 @@ all applicable compatibility and integrity gates pass.
 | Engine compatibility | Engine 1.0.0 retained; Engine 2.0.0 is a separate future path | Accepted |
 | Result boundary | Result/1 unchanged; Result/2 required for actor/schedule evidence | Accepted |
 | Suite versioning | `suite.run/1` unchanged; `suite.run/2` required for Engine 2 replay envelope | Accepted |
-| Resource bounds and security | Explicit ceilings before implementation; local, bounded, redacted, no network/LLM/distributed authority | Accepted |
+| Resource bounds and security | Public inclusive DSL 2/Engine 2 ceilings frozen in Section 13; inherited limits preserved; local, bounded, redacted, no network/LLM/distributed authority | Accepted |
 | Existing CLI/API | Preserve legacy signatures/behavior; additive Engine 2 surface requires checkpoint review | Accepted |
 
 No frozen Phase 1–4 contract materially conflicts with this architecture. The
@@ -369,12 +455,12 @@ next.
 
 | Checkpoint | Bounded objective | Explicit acceptance gate |
 |---|---|---|
-| **5.1 — Versioned actor and DSL 2 models** | Immutable actor declarations, identity, strict DSL 2 parse/compile dispatch, frozen bounds | DSL 1 parser/goldens unchanged; duplicate/invalid actors and mixed DSL fail closed; canonical actor addresses pass Phase 4 rules |
+| **5.1 — Versioned actor and DSL 2 models** | Immutable actor declarations, identity, strict DSL 2 parse/compile dispatch, frozen bounds | Exact 32 actors, 256 nodes/actor, and 4,096 aggregate nodes pass; each ceiling plus one fails before execution; per-actor and aggregate counts are independent; DSL 1 parser/goldens unchanged; duplicate/invalid actors and mixed DSL fail closed; canonical actor addresses pass Phase 4 rules |
 | **5.2 — Engine 2 step-atomic kernel** | Shared state/clock and actor positions with one-step commit boundary | Serial reference cases prove no partial mutation, one shared clock, immutable committed history, and no host concurrency semantics |
-| **5.3 — Deterministic scheduler** | `scenario.scheduler/1`, ready-set construction, independent schedule seed | Literal scheduler vectors across actor order/process runs; root-seed/schedule-seed isolation; bounds and stall behavior pass |
-| **5.4 — Schedule evidence and identity** | `scenario.schedule/1`, canonical records and schedule hash | Canonical-byte/hash vectors, attempted/committed outcome rules, tamper rejection, immutable bounded evidence pass |
-| **5.5 — Result and manifest v2** | `scenario.result/2` and `scenario.manifest/2` normalization | Exact schema/round-trip/golden vectors; actor/history/artifact order; no Result/1 or Manifest/1 byte drift |
-| **5.6 — Exact schedule replay** | Verify complete Engine 2 coordinates and each recorded selection | Positive exact-byte replay; scenario/input/actor/ready-set/selection/seed/version/hash mismatches fail before mismatched commit |
+| **5.3 — Deterministic scheduler** | `scenario.scheduler/1`, ready-set construction, independent schedule seed | Literal scheduler vectors across actor order/process runs; root-seed/schedule-seed isolation; exactly 65,536 selections and 4,096 routing operations/selection pass, plus one fails before excess work or transition; counts are host-independent; stall behavior passes |
+| **5.4 — Schedule evidence and identity** | `scenario.schedule/1`, canonical records and schedule hash | Canonical-byte/hash vectors; exactly 8 MiB passes and one byte over fails without partial evidence; attempted/committed outcome rules, tamper rejection, immutable bounded evidence pass |
+| **5.5 — Result and manifest v2** | `scenario.result/2` and `scenario.manifest/2` normalization | Exact schema/round-trip/golden vectors; exactly 32 MiB passes and one byte over fails without a partial result; actor/history/artifact order; no Result/1 or Manifest/1 byte drift |
+| **5.6 — Exact schedule replay** | Verify complete Engine 2 coordinates and each recorded selection | Positive exact-byte replay; exactly 65,536 verified selections pass and plus one fails before excess verification or execution; scenario/input/actor/ready-set/selection/seed/version/hash mismatches fail before mismatched commit |
 | **5.7 — Suite run v2 and orchestration** | `suite.run/2` envelope and finite compatibility reporting | Run/2 round trips and replay links; Run/1 unchanged; mixed-major and incomplete envelopes fail closed |
 | **5.8 — Actor-aware diagnostics and inspection** | Safe errors, inspect/explain/diff support for v2 evidence | Actor semantic paths, finite codes, deterministic ordering, redaction, unavailable-not-invented behavior, v1 regressions pass |
 | **5.9 — Actor-aware static trace viewing** | Offline bounded actor grouping from supported v2 evidence | Self-contained CSP-safe escaped output; no execution/network/mutation; deterministic actor/global views; v1 viewer behavior preserved |
@@ -407,6 +493,15 @@ Phase 5 may be accepted only when all of the following are demonstrated:
 8. no network, runtime LLM, real-threading semantics, distributed authority, or
    excluded schedule-exploration feature enters the product; and
 9. independent release acceptance and explicit publication authorization pass.
+
+Resource-bound acceptance additionally requires boundary and boundary-plus-one
+tests for every Section 13 ceiling; independent per-actor and aggregate
+declaration tests; declaration-versus-runtime-selection tests using repeat or
+revisit behavior; static rejection before execution; dynamic rejection before
+the excess operation; exact canonical byte accounting with multibyte UTF-8;
+deterministic error precedence; no truncation or partial success; secret-safe
+`scenario.error/1` failures; unchanged semantic-address and diagnostic vectors;
+and unchanged DSL 1 accepted inputs, limits, result bytes, and replay behavior.
 
 ## 17. Phase 5.0 exit gate and mandatory stop
 
