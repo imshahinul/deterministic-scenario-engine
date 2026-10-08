@@ -174,31 +174,118 @@ the failing actor without weakening immutable committed-history semantics.
 
 ## 7. Scheduler and schedule seed
 
-The scheduler is a pure logical selector. Scheduler contract
-`scenario.scheduler/1` freezes this selection algorithm:
+### 7.1 Normative `scenario.scheduler/1` contract
 
-1. Form the ready set and sort it by canonical actor-address bytes.
-2. Build canonical compact UTF-8 JSON using existing typed-value normalization
-   with exactly: scheduler contract, independent `schedule_seed`, scenario
-   canonical hash, canonical input/resource identity, run index, zero-based
-   selection ordinal, current committed-history length, shared logical-clock
-   value, and the ordered ready actor addresses.
-3. Compute SHA-256 of those bytes, interpret all 256 digest bits as one unsigned
-   big-endian integer, and select `integer modulo ready_count`.
-4. Record the complete selection coordinates, ready set, selected actor, and
-   outcome in immutable schedule evidence.
+The scheduler is a pure logical selector. Its exact normalized coordinate
+envelope is:
 
-`schedule_seed` is a required explicit string or integer, excluding booleans,
-and is independent from the existing generation `root_seed`. Neither seed is
-derived from the other. Actor selection never consumes addressed generator RNG
-state and generation never consumes scheduler state. Scheduler choices depend
-only on the listed canonical coordinates; declaration order, mapping insertion
-order, process history, worker timing, filesystem enumeration, environment,
-network, wall clock, or runtime object identity are forbidden inputs.
+```json
+{"contract":"scenario.scheduler/1","coordinates":{"committed_history_length":0,"input_resource_hashes":{},"logical_clock":{"$type":"datetime","value":"2026-01-01T00:00:00.000000+00:00"},"ready_actors":[],"run_index":0,"scenario_hash":"0000000000000000000000000000000000000000000000000000000000000000","schedule_seed":0,"selection_ordinal":0}}
+```
 
-A behavior-changing selection algorithm requires a new scheduler contract. An
-implementation version or distribution patch cannot silently change
-`scenario.scheduler/1` output.
+The example's empty `ready_actors` illustrates the schema only and is not a
+valid selector request. The fields and nesting are exact; no additional field,
+omitted field, alias, or `null` value is accepted.
+
+| Coordinate | Exact semantic type and encoding |
+|---|---|
+| `contract` | Exact string `scenario.scheduler/1`; this field is the sole domain separator |
+| `scenario_hash` | Required canonical scenario-definition hash: exactly 64 lowercase hexadecimal ASCII characters |
+| `input_resource_hashes` | Exact public manifest `input_resource_hashes` string-to-string mapping, with its existing `input:<name>` / `resource:<name>` and fingerprint semantics; normalized by the existing semantic normalizer, which sorts mapping keys |
+| `run_index` | Required nonnegative Python integer excluding `bool`; any tighter inherited producer limit remains applicable |
+| `schedule_seed` | Required independent Python integer excluding `bool`, inclusive range 0 through 18,446,744,073,709,551,615 (`2^64-1`) |
+| `selection_ordinal` | Required zero-based Python integer excluding `bool`, inclusive range 0 through 65,535; at most 65,536 selections exist |
+| `committed_history_length` | Required nonnegative Python integer excluding `bool`; number of committed transition records before this decision |
+| `logical_clock` | Required timezone-aware `datetime` semantic value for the one shared logical clock; existing normalization converts it to UTC `{"$type":"datetime","value":"<ISO-8601 with exactly six fractional digits and +00:00>"}` |
+| `ready_actors` | Nonempty unique subset of declared canonical actor addresses, normalized into unsigned lexicographic order of their UTF-8 bytes |
+
+Declared and ready actors must be canonical `scenario.semantic-address/1`
+strings of the exact activated actor shape `scenario:/actor/<identifier>`.
+Every ready actor must be declared; declared actors and ready actors are each
+unique. Actor declaration order and caller ready-set order have no authority.
+
+The envelope is passed once through the existing canonical semantic normalizer
+and JSON serializer: UTF-8, sorted object keys, compact separators,
+`ensure_ascii=false`, no trailing newline, and no locale or whitespace
+dependence. No byte prefix is prepended. SHA-256 hashes all and only those exact
+bytes. The complete 32-byte digest is interpreted as an unsigned big-endian
+256-bit integer. For normalized ready list `R`:
+
+```text
+selected_index = digest_integer modulo len(R)
+selected_actor = R[selected_index]
+```
+
+An empty ready set is rejected before hashing or modulo; all-terminal completion
+and nonterminal scheduler-stall classification belong to actor control
+integration, not this pure selector. With one ready actor the complete canonical
+bytes and SHA-256 digest are still computed and returned, and the selected index
+is zero.
+
+Validation fails closed without coercion, truncation, clamping, deduplication,
+or partial output. Missing coordinates, booleans in integer fields, negative or
+over-limit integers, floats, numeric strings, naive datetimes, malformed or
+noncanonical hashes or actor addresses, duplicate actors, undeclared ready
+actors, non-string resource names/hashes, and unsupported semantic values are
+errors. Validation precedence is the coordinate table order, followed by
+declared actors, then ready actors; within an actor sequence input order is used
+only to identify the first invalid or duplicate value. Stable diagnostics expose
+the failed public field or limit, never arbitrary value representations.
+
+`schedule_seed` is independent from the existing generation `root_seed`.
+Neither seed is derived from the other. Actor selection never consumes addressed
+generator RNG state and generation never consumes scheduler state. Scheduler
+choices depend only on the envelope. Process history, worker timing, filesystem
+enumeration, environment, network, wall clock, runtime object identity, Python
+hash randomization, and global mutable state are forbidden inputs.
+
+The algorithm and every output-affecting representation above are immutable for
+`scenario.scheduler/1`. A behavior change requires a new scheduler contract;
+distribution or implementation versions cannot silently change it. This
+contract does not construct readiness, execute actors, route control, classify
+completion or stalls, mutate state or clock, persist or replay schedules, emit
+`scenario.schedule/1` or `scenario.result/2`, explore schedules, or provide host
+parallelism.
+
+### 7.2 Independent golden vectors
+
+These vectors were calculated by a standalone Python standard-library reference
+using `json.dumps(..., ensure_ascii=False, separators=(",", ":"),
+sort_keys=True)`, `hashlib.sha256`, `int(digest, 16)`, and modulo; it imports no
+scheduler or Scenario Engine code. Each `bytes` value below is the exact UTF-8
+text (with no trailing newline).
+
+**V1 — one actor, seed 0, ordinal 0**
+
+```text
+bytes={"contract":"scenario.scheduler/1","coordinates":{"committed_history_length":0,"input_resource_hashes":{},"logical_clock":{"$type":"datetime","value":"2026-01-01T00:00:00.000000+00:00"},"ready_actors":["scenario:/actor/alpha"],"run_index":0,"scenario_hash":"0000000000000000000000000000000000000000000000000000000000000000","schedule_seed":0,"selection_ordinal":0}}
+sha256=db753de068e327a09694ccd0b4676a0c602fe9c5380f7e185a0835a1b194bc66
+selected_index=0
+selected_actor=scenario:/actor/alpha
+```
+
+**V2 — two actors supplied in reverse order, seed 1, ordinal 0, manifest input identity**
+
+```text
+bytes={"contract":"scenario.scheduler/1","coordinates":{"committed_history_length":0,"input_resource_hashes":{"input:user":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"logical_clock":{"$type":"datetime","value":"2026-01-01T00:00:00.000000+00:00"},"ready_actors":["scenario:/actor/alpha","scenario:/actor/beta"],"run_index":0,"scenario_hash":"0000000000000000000000000000000000000000000000000000000000000000","schedule_seed":1,"selection_ordinal":0}}
+sha256=d14c771920e3d451645bfd62d9458225c667ae824ab838516ae5abab4b19585d
+selected_index=1
+selected_actor=scenario:/actor/beta
+```
+
+**V3 — three actors, Unicode identifier, seed 0, ordinal 1**
+
+```text
+bytes={"contract":"scenario.scheduler/1","coordinates":{"committed_history_length":1,"input_resource_hashes":{},"logical_clock":{"$type":"datetime","value":"2026-01-01T00:00:01.000002+00:00"},"ready_actors":["scenario:/actor/%C3%A9clair","scenario:/actor/alpha","scenario:/actor/beta"],"run_index":7,"scenario_hash":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","schedule_seed":0,"selection_ordinal":1}}
+sha256=3abc028519a8d1dd300fec26e33744182198e8f871cadbff138c75f699cca87b
+selected_index=1
+selected_actor=scenario:/actor/alpha
+```
+
+Supplying V3's ready actors as `beta`, `%C3%A9clair`, `alpha` produces the exact
+same normalized bytes, digest, index, and actor. Together V1–V3 freeze one, two,
+and three actors, two seeds, two ordinals, reordered input, manifest resource
+identity, and a canonical NFC Unicode actor identifier.
 
 ## 8. Schedule identity and replay authority
 
