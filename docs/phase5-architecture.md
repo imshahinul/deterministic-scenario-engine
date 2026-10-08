@@ -1,0 +1,431 @@
+# Phase 5.0 Step-Atomic Deterministic Logical Concurrency Architecture Freeze
+
+## 1. Status and authority
+
+This document freezes the approved Phase 5 product direction: **Step-Atomic
+Deterministic Logical Concurrency**. It is a design and scope checkpoint, not an
+implementation or release authorization. Phase 4 is complete; Phase 5
+implementation has not started.
+
+The immutable entry baseline is distribution and release tag `2.2.0`, commit
+`aaa0495239df9db093c5e42d817a9d449e5ea055`, tree
+`c61e7380e848b789388d351470bb0d99d06db0b7`.
+
+```text
+PHASE5_SCOPE_FROZEN=YES
+PHASE5_IMPLEMENTATION_STARTED=NO
+PHASE5_1_AUTHORIZED=NO
+PHASE5_PRODUCTION_CODE_CHANGED=NO
+PHASE5_VERSION_VALUES_CHANGED=NO
+```
+
+The future targets below are not current values and are not authorized release
+metadata changes:
+
+| Version role | Frozen future target | Meaning |
+|---|---:|---|
+| Distribution | `3.0.0` | Packaging and publication identity only |
+| Engine | `2.0.0` | Deterministic execution and replay compatibility major |
+| Manifest engine | `2.0.0` | `engine_version` recorded by an Engine 2 manifest |
+| DSL | integer `2` | Syntax/semantic dispatch selector for logical actors |
+| Result | `scenario.result/2` | Actor- and schedule-aware result contract |
+| Suite run | `suite.run/2` | Engine 2 run/replay envelope contract |
+
+Distribution, engine, manifest schema, manifest engine value, DSL, result,
+suite, scheduler, and schedule-evidence versions are independent roles. No role
+is inferred from another.
+
+## 2. Product boundary
+
+Phase 5 adds:
+
+- uniquely named logical actors (also called lanes in presentation only);
+- one shared scenario state and one shared logical clock;
+- deterministic interleaving between atomic actor transitions;
+- a separately versioned deterministic scheduler and independent schedule seed;
+- a canonical schedule identity and exact schedule replay;
+- actor-aware immutable history, diagnostics, and static trace viewing; and
+- explicit DSL 1/Engine 1 and DSL 2/Engine 2 dispatch boundaries.
+
+Actors are logical engine entities. They are not operating-system threads,
+processes, tasks, coroutines, or `asyncio` objects. Execution may be implemented
+serially and its meaning cannot depend on host scheduling.
+
+Phase 5 explicitly excludes schedule exploration, partial-order reduction,
+schedule shrinking, microstep or yield scheduling, locks, semaphores, real
+threading, `asyncio` semantics, distributed workers, hosted UI, an adapter
+marketplace, runtime LLM integration, network execution authority, and any
+general workflow service.
+
+## 3. Preserved contracts and compatibility boundary
+
+The following Phase 4 contracts remain unchanged and independently versioned:
+
+```text
+scenario.semantic-address/1
+scenario.error/1
+scenario.scaffold/1
+scenario.definition-diff/1
+scenario.impact/1
+scenario.trace-view/1
+scenario.compatibility-fixtures/1
+suite.run/1
+```
+
+The frozen DSL 1 parser, Engine 1.0.0 execution semantics, whole-step atomicity,
+`scenario.result/1`, `scenario.manifest/1`, `suite.run/1`, deterministic RNG and
+ID behavior, golden result bytes, existing supported replay behavior, root APIs,
+CLI behavior, and immutable historical artifacts are not modified in place.
+
+Phase 5 requires new contracts because actor and schedule coordinates cannot be
+added to the frozen normalized fields of `scenario.result/1` or
+`scenario.manifest/1`, and cannot be added to `suite.run/1` without changing its
+accepted meaning. Engine 2 therefore uses the new `scenario.result/2`,
+`scenario.manifest/2`, and `suite.run/2` contracts. The manifest schema name is
+an architectural consequence of the frozen v1 field set; it is independent of
+the manifest's future `engine_version == "2.0.0"` value.
+
+Historical bytes are read under their declared contract. Readers never infer a
+new contract from package version, add missing actor/schedule fields, or silently
+upgrade an artifact. Unknown, mixed, incomplete, or unsupported version tuples
+fail closed. Inspection, diff, migration, execution, and replay remain separate
+capabilities.
+
+## 4. Actor model and identity
+
+An actor declaration has a nonempty unique author-assigned identifier. Actor
+identity is the canonical `scenario.semantic-address/1` address
+`scenario:/actor/<identifier>` using the existing normalization, escaping,
+depth, length, equality, and ordering rules. A step in an actor is addressed as
+`scenario:/actor/<identifier>/step/<step-id>`. No raw YAML path, list index,
+source order, host thread identifier, or display label is durable actor identity.
+
+The Phase 4 reserved `actor` kind is activated without changing the grammar or
+meaning of existing semantic addresses. `lane` remains presentation terminology
+and is not a second identity namespace. Actor ordering is unsigned
+lexicographic ordering of canonical semantic-address UTF-8 bytes. Declaration
+order may be retained for author presentation but has no scheduler authority.
+
+All actors observe and atomically update one shared `ScenarioState`. There is no
+actor-owned copy, merge phase, shared mutable resource cache, or DB/ORM-owned
+state. Generated locals and derived values are invocation-local and disappear at
+the transition boundary. An actor's next-node/program-counter position is
+deterministic scheduler control state, not user scenario state. New persistent
+actor-private mutable state is not implicit: authors represent it explicitly in
+the shared state if needed.
+
+## 5. Atomic execution semantics
+
+The scheduling boundary is one existing whole executable step. For a selected
+actor, deterministic control routing needed to locate its next executable step
+is resolved without yielding and without mutating shared state. A scheduler
+cannot interleave inside generation, derivation, patch construction, validation,
+invariant evaluation, emission construction, transition resolution, or commit.
+
+```text
+select ready actor
+→ resolve actor's next executable step
+→ snapshot shared PRE-state and shared logical clock
+→ apply matching before-step faults
+→ generate actor-step locals
+→ derive prospective values
+→ construct shared-state patch
+→ candidate shared POST-state
+→ validate candidate and evaluate invariants
+→ construct candidate emissions
+→ resolve actor transition
+→ ATOMIC COMMIT of state, clock, history, artifacts, and actor position
+```
+
+Existing before-validation resource faults, resource validation, and constraints
+remain pre-execution setup and complete before scheduling starts. Within a
+selected transition, matching faults retain declaration order. Candidate
+validation and invariants precede emissions and transition resolution, as in the
+frozen whole-step model. A derivation, fault, validation, invariant, emission, or
+transition failure commits no state patch, clock advance, history record,
+artifact, or actor-position advance.
+
+There is exactly one shared logical clock. Each successfully committed selected
+step advances it by that step's declared nonnegative duration. A failed step does
+not advance it. Simultaneous wall-clock time, time slicing, and host timing have
+no semantic meaning.
+
+## 6. Readiness, completion, and failure
+
+At a scheduling point, an actor is:
+
+- **ready** when deterministic control routing reaches a next executable step;
+- **terminal** when its declared actor flow has completed; or
+- **failed** when its selected transition raises a deterministic execution
+  failure.
+
+Control routing is finite and bounded and cannot itself be a scheduling yield.
+There are no lock, semaphore, sleep, mailbox, external-event, or host-I/O waiting
+states in Phase 5. If no actor is ready and every actor is terminal, the scenario
+completes. If no actor is ready while any actor is nonterminal, execution fails
+closed with a deterministic scheduler-stall error; it is never guessed to be
+successful. The actor set is fixed before execution; actors cannot spawn actors.
+
+Only the selected actor attempts a transition. A transition failure terminates
+the scenario; no other actor runs afterward. The schedule trace records that
+selection as an attempted selection with its outcome, while committed scenario
+history contains only successful atomic commits. Thus diagnostics can identify
+the failing actor without weakening immutable committed-history semantics.
+
+## 7. Scheduler and schedule seed
+
+The scheduler is a pure logical selector. Scheduler contract
+`scenario.scheduler/1` freezes this selection algorithm:
+
+1. Form the ready set and sort it by canonical actor-address bytes.
+2. Build canonical compact UTF-8 JSON using existing typed-value normalization
+   with exactly: scheduler contract, independent `schedule_seed`, scenario
+   canonical hash, canonical input/resource identity, run index, zero-based
+   selection ordinal, current committed-history length, shared logical-clock
+   value, and the ordered ready actor addresses.
+3. Compute SHA-256 of those bytes, interpret all 256 digest bits as one unsigned
+   big-endian integer, and select `integer modulo ready_count`.
+4. Record the complete selection coordinates, ready set, selected actor, and
+   outcome in immutable schedule evidence.
+
+`schedule_seed` is a required explicit string or integer, excluding booleans,
+and is independent from the existing generation `root_seed`. Neither seed is
+derived from the other. Actor selection never consumes addressed generator RNG
+state and generation never consumes scheduler state. Scheduler choices depend
+only on the listed canonical coordinates; declaration order, mapping insertion
+order, process history, worker timing, filesystem enumeration, environment,
+network, wall clock, or runtime object identity are forbidden inputs.
+
+A behavior-changing selection algorithm requires a new scheduler contract. An
+implementation version or distribution patch cannot silently change
+`scenario.scheduler/1` output.
+
+## 8. Schedule identity and replay authority
+
+The independently versioned schedule evidence contract is
+`scenario.schedule/1`. Its canonical payload contains the scheduler contract and
+seed, scenario/input/resource identities, execution compatibility coordinates,
+initial actor set, and ordered selection records. Its `schedule_hash` is the
+lowercase SHA-256 of canonical schedule payload bytes with the `schedule_hash`
+field omitted. This hash is the canonical schedule identity; a seed alone is not
+a schedule identity.
+
+Exact Engine 2 replay requires the exact scenario source/identity and canonical
+hash, explicit inputs/resources, generation root seed, schedule seed, run index,
+locale, reference clock, actor identities, ordered recorded ready sets and actor
+selections, scheduler contract, engine and DSL versions, RNG/ID/generator/plugin
+versions, schedule contract/hash, and every other required execution coordinate.
+Replay recomputes readiness and the `scenario.scheduler/1` choice at every
+selection, verifies it against the recorded selection before executing that
+transition, then verifies the resulting schedule hash and canonical result.
+
+A mismatch in scenario, inputs/resources, actor set, ready set, selected actor,
+selection count, scheduler version, seed, or any other required coordinate fails
+closed before the mismatched transition commits. Recorded actor selections are
+evidence to verify, not authority to force an actor that is not ready. Missing
+coordinates cannot be reconstructed from fingerprints. Migration or
+inspectability never implies replayability.
+
+## 9. Actor-aware history, result, and diagnostics
+
+`scenario.result/2` is a new normalized envelope. It carries Engine 2 manifest
+coordinates, final shared state and clock, actor terminal positions/statuses,
+ordered committed history, artifacts, provenance when present, and complete
+bounded schedule evidence/identity. Every history and provenance event that
+arises in actor execution carries the canonical actor address. Actor-qualified
+step addresses use `scenario.semantic-address/1`; Engine 1 `ExecutionAddress`
+JSON is not reinterpreted as an actor address.
+
+History order is global atomic commit order. It is authoritative and append-only;
+per-actor views are stable filters over that order, never separately reordered
+histories. Artifact order is global commit order and then existing declaration
+order within a committed step. Mapping normalization remains key-sorted. Failed
+attempts appear in schedule/failure evidence, not as committed history.
+
+Actor-aware diagnostics continue to use `scenario.error/1`. Its
+`semantic_path`, when available, is the canonical actor or actor-step semantic
+address; bounded details may carry safe schedule ordinal and contract identifiers.
+No secret seed value, input value, hash preimage, traceback, host path, or raw
+plugin exception is disclosed. Stable new error codes require explicit contract
+review but do not require a new envelope merely because the semantic path now
+uses the already-reserved actor namespace.
+
+`scenario.trace-view/1` remains the renderer contract. It may add an actor-grouped
+presentation for supported `scenario.result/2` or `suite.run/2` input only through
+an explicitly compatible input-support revision whose output remains bounded,
+self-contained, escaped, offline, read-only, and non-executing. The renderer does
+not infer missing schedules or replay evidence.
+
+## 10. DSL and engine dispatch
+
+DSL selection occurs before compilation or execution:
+
+| Declared DSL | Execution path | Accepted result/run family |
+|---|---|---|
+| `1` | Frozen DSL 1 parser/compiler and Engine 1.0.0 compatibility path | `scenario.result/1`, `scenario.manifest/1`, `suite.run/1` |
+| `2` | DSL 2 parser/compiler and Engine 2.0.0 logical-concurrency path | `scenario.result/2`, `scenario.manifest/2`, `suite.run/2` |
+| Unknown/missing/mixed | Fail closed before execution | None |
+
+Valid DSL 1 documents retain their existing meaning and cannot opt into actors,
+schedule seeds, or Engine 2 by package-version inference. DSL 2 does not pass
+through or mutate DSL 1 models and then retrofit actors. A document cannot mix
+DSL 1 root-step execution with DSL 2 actor execution. Any future serial shorthand
+in DSL 2 must lower to an explicit actor before identity and scheduling, but such
+syntax is not authorized by this freeze.
+
+Engine 1 and Engine 2 coexist as explicit compatibility paths. Engine 2 does not
+replace the frozen Engine 1 implementation and Engine 1 does not accept Engine 2
+manifest, result, scheduler, or schedule contracts. Cross-major replay is
+supported only where a separately frozen exact route exists; none is inferred.
+
+## 11. Suite, API, and CLI boundaries
+
+`suite.run/2` is the Engine 2 run and replay envelope. It identifies exactly one
+`scenario.result/2`/`scenario.manifest/2` execution and its schedule evidence,
+or exact immutable references with hashes under a separately approved storage
+form. It cannot wrap an Engine 1 child while claiming Engine 2 replay semantics.
+`suite.run/1` remains byte- and meaning-stable.
+
+Existing public Python names, signatures, commands, options, streams, exit-code
+families, and contract behavior remain compatible for DSL 1 and v1 artifacts.
+Phase 5 may add explicit Engine 2 APIs/options only at their checkpoint contract
+review; it cannot silently change default dispatch, reinterpret `--seed` as the
+schedule seed, or make a schedule seed optional. The existing `run` and `replay`
+journey may route by declared artifact/DSL contract while preserving legacy
+outputs. A new top-level CLI command is not required by this architecture and is
+not authorized here.
+
+## 12. Contract compatibility matrix
+
+| Producer artifact | Consumer/path | Frozen posture |
+|---|---|---|
+| DSL 1 source | Engine 1 path | Execute with frozen semantics; preserve golden bytes |
+| DSL 1 source | Engine 2 actor path | Unsupported; no silent promotion |
+| DSL 2 source | Engine 1 path | Unsupported before execution |
+| `scenario.result/1` / `scenario.manifest/1` | Existing readers/inspection/diff/migration | Preserve current finite support |
+| `scenario.result/1` / `suite.run/1` | Existing supported replay | Preserve exact current behavior |
+| v1 artifact | Engine 2 replay | Unsupported unless a future explicit exact route is frozen |
+| `scenario.result/2` / `scenario.manifest/2` | Engine 1 reader/replay | Unknown/unsupported; fail closed |
+| `scenario.result/2` / `suite.run/2` | Engine 2 exact replay | Supported only with complete exact coordinates |
+| Result/manifest of either major | Reader for unknown newer contract | Fail closed; never silently upgrade |
+| Phase 4 durable contracts | Phase 5 tools | Preserve contract versions and existing semantics |
+
+This matrix preserves legacy deterministic goldens and supported replay while
+making no promise of universal cross-major execution.
+
+## 13. Security and resource model
+
+All Phase 1–4 trust boundaries remain mandatory: safe YAML, explicit bounded
+local inputs, no-follow path handling, regular files, explicit roots, absent
+destinations, atomic publication, canonical bytes, immutable evidence, exact
+hash verification, secret redaction, and fail-closed unknown versions. Explicit
+Python plugins remain trusted and unsandboxed but receive no scheduler,
+filesystem, network, process, environment, or wall-clock authority from Phase 5.
+
+Before Phase 5.1 implementation, public hard ceilings must be frozen for actor
+count, transitions, control-routing work per selection, schedule records,
+schedule bytes, result bytes, semantic-address depth/bytes, diagnostic details,
+and replay verification work. Defaults may be lower than hard ceilings. Limit
+failure is deterministic, bounded, redacted, and non-partial. No implementation
+may ship with unbounded actor, schedule, history, or canonicalization growth.
+
+The engine performs no network calls, remote retrieval, runtime LLM calls,
+distributed coordination, subprocess scheduling, dynamic code loading from DSL,
+or ambient environment discovery. Schedule artifacts are untrusted input;
+reading and inspection are bounded and non-executing. Replay executes only after
+all applicable compatibility and integrity gates pass.
+
+## 14. Architecture decision register
+
+| Decision | Frozen resolution | Status |
+|---|---|---|
+| Actor identity and ordering | Unique names; canonical `scenario:/actor/<id>` identity; bytewise canonical-address ordering | Accepted |
+| Actor-local versus shared state | One shared logical state; locals are transition-local; actor position is engine control state | Accepted |
+| Atomic transition boundary | One whole executable step; no yield or interleaving inside it | Accepted |
+| Readiness and termination | Finite deterministic routing; terminal only when all actors terminal; nonterminal empty-ready set fails closed | Accepted |
+| Schedule seed and selection | Independent required seed; exact `scenario.scheduler/1` SHA-256 coordinate algorithm | Accepted |
+| Schedule hash and replay | `scenario.schedule/1`; hash of canonical schedule payload; replay verifies every ready set and selection | Accepted |
+| Failure/fault/invariant ordering | Existing step order retained; failed transition commits no scenario mutation; attempted selection remains evidence | Accepted |
+| History and normalization | Global commit order with actor addresses; per-actor views are filters; new `scenario.result/2` | Accepted |
+| DSL dispatch | Declared integer 1 uses frozen path; integer 2 uses actor path; mixed/unknown fails closed | Accepted |
+| Engine compatibility | Engine 1.0.0 retained; Engine 2.0.0 is a separate future path | Accepted |
+| Result boundary | Result/1 unchanged; Result/2 required for actor/schedule evidence | Accepted |
+| Suite versioning | `suite.run/1` unchanged; `suite.run/2` required for Engine 2 replay envelope | Accepted |
+| Resource bounds and security | Explicit ceilings before implementation; local, bounded, redacted, no network/LLM/distributed authority | Accepted |
+| Existing CLI/API | Preserve legacy signatures/behavior; additive Engine 2 surface requires checkpoint review | Accepted |
+
+No frozen Phase 1–4 contract materially conflicts with this architecture. The
+new major contracts are required precisely to avoid reinterpreting frozen v1
+contracts. The Phase 4 `actor` semantic-address reservation is compatible and is
+activated only for new Phase 5 producers.
+
+## 15. Checkpoint sequence and acceptance gates
+
+Each checkpoint requires all predecessor gates, localized changes, targeted
+tests, deterministic fixtures, security review appropriate to its surface,
+documentation, `git diff --check`, no unintended legacy-byte changes, and a
+clean committed evidence record. Passing one checkpoint does not authorize the
+next.
+
+| Checkpoint | Bounded objective | Explicit acceptance gate |
+|---|---|---|
+| **5.1 — Versioned actor and DSL 2 models** | Immutable actor declarations, identity, strict DSL 2 parse/compile dispatch, frozen bounds | DSL 1 parser/goldens unchanged; duplicate/invalid actors and mixed DSL fail closed; canonical actor addresses pass Phase 4 rules |
+| **5.2 — Engine 2 step-atomic kernel** | Shared state/clock and actor positions with one-step commit boundary | Serial reference cases prove no partial mutation, one shared clock, immutable committed history, and no host concurrency semantics |
+| **5.3 — Deterministic scheduler** | `scenario.scheduler/1`, ready-set construction, independent schedule seed | Literal scheduler vectors across actor order/process runs; root-seed/schedule-seed isolation; bounds and stall behavior pass |
+| **5.4 — Schedule evidence and identity** | `scenario.schedule/1`, canonical records and schedule hash | Canonical-byte/hash vectors, attempted/committed outcome rules, tamper rejection, immutable bounded evidence pass |
+| **5.5 — Result and manifest v2** | `scenario.result/2` and `scenario.manifest/2` normalization | Exact schema/round-trip/golden vectors; actor/history/artifact order; no Result/1 or Manifest/1 byte drift |
+| **5.6 — Exact schedule replay** | Verify complete Engine 2 coordinates and each recorded selection | Positive exact-byte replay; scenario/input/actor/ready-set/selection/seed/version/hash mismatches fail before mismatched commit |
+| **5.7 — Suite run v2 and orchestration** | `suite.run/2` envelope and finite compatibility reporting | Run/2 round trips and replay links; Run/1 unchanged; mixed-major and incomplete envelopes fail closed |
+| **5.8 — Actor-aware diagnostics and inspection** | Safe errors, inspect/explain/diff support for v2 evidence | Actor semantic paths, finite codes, deterministic ordering, redaction, unavailable-not-invented behavior, v1 regressions pass |
+| **5.9 — Actor-aware static trace viewing** | Offline bounded actor grouping from supported v2 evidence | Self-contained CSP-safe escaped output; no execution/network/mutation; deterministic actor/global views; v1 viewer behavior preserved |
+| **5.10 — Public API/CLI and compatibility fixtures** | Explicit additive Engine 2 entry surface and immutable cross-version fixtures | Existing APIs/CLI journeys remain compatible; schedule seed is explicit; fixture integrity and full compatibility matrix pass |
+| **5.11 — Performance, security, and contract freeze** | Enforce ceilings, adversarial replay/evidence tests, final public contracts | Resource ceilings, deterministic limit failures, tamper/path/secret tests, legacy goldens, docs and fresh-install targeted gates all pass |
+| **5.12 — Independent acceptance and DSE 3.0.0 publication** | Independent candidate verification, then separately authorized tag/package/release | Candidate SHA/artifact hashes, clean source, supported Python matrix, replay/security acceptance, explicit publication authorization, immutable release verification |
+
+The tentative publication target for DSE `3.0.0` is **December 15, 2026**. It
+is a planning target, not an authorization or guarantee. Publication cannot occur
+before 5.12 gates and a separate explicit release decision.
+
+## 16. Phase 5 acceptance criteria
+
+Phase 5 may be accepted only when all of the following are demonstrated:
+
+1. named logical actors interleave only at whole-step boundaries over one shared
+   state and logical clock;
+2. scheduler vectors depend only on frozen canonical coordinates and the
+   independent schedule seed;
+3. canonical schedule identity and exact replay detect every required coordinate
+   mismatch before unsafe commit;
+4. actor-aware history, diagnostics, inspection, diff, and trace presentation are
+   deterministic, bounded, immutable, and secret-safe;
+5. DSL 1, Engine 1.0.0, Result/1, Manifest/1, Suite Run/1, supported replay,
+   Phase 4 contracts, and all frozen legacy golden bytes remain unchanged;
+6. unknown or unsupported contracts fail closed and no historical artifact is
+   silently upgraded;
+7. filesystem/evidence integrity and deterministic RNG/ID guarantees remain
+   intact;
+8. no network, runtime LLM, real-threading semantics, distributed authority, or
+   excluded schedule-exploration feature enters the product; and
+9. independent release acceptance and explicit publication authorization pass.
+
+## 17. Phase 5.0 exit gate and mandatory stop
+
+This architecture-freeze checkpoint passes when the exact entry baseline and
+repository state are verified, this is the only repository path changed,
+targeted contract consistency checks and `git diff --check` pass, a
+documentation-only commit is pushed without force, final `HEAD`, `main`, and
+`origin/main` agree with a clean worktree, and one external evidence file records
+the immutable result.
+
+```text
+PHASE5_0_ARCHITECTURE_FREEZE_COMPLETE=YES
+PHASE5_1_IMPLEMENTATION_AUTHORIZED=NO
+PRODUCTION_CODE_CHANGE_AUTHORIZED=NO
+CURRENT_VERSION_CHANGE_AUTHORIZED=NO
+RELEASE_PUBLICATION_AUTHORIZED=NO
+NEXT_ACTIVITY=MANDATORY_STOP
+```
+
+Successful scope freeze is not implementation authorization. Do not implement
+Phase 5.1, change production code, change current version values, or publish a
+release as part of this checkpoint.
