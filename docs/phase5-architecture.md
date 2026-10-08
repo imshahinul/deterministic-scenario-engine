@@ -545,6 +545,20 @@ next.
 | **5.1 — Versioned actor and DSL 2 models** | Immutable actor declarations, identity, strict DSL 2 parse/compile dispatch, frozen bounds | Exact 32 actors, 256 nodes/actor, and 4,096 aggregate nodes pass; each ceiling plus one fails before execution; per-actor and aggregate counts are independent; DSL 1 parser/goldens unchanged; duplicate/invalid actors and mixed DSL fail closed; canonical actor addresses pass Phase 4 rules |
 | **5.2 — Engine 2 step-atomic kernel** | Shared state/clock and actor positions with one-step commit boundary | Serial reference cases prove no partial mutation, one shared clock, immutable committed history, and no host concurrency semantics |
 | **5.3 — Deterministic scheduler** | `scenario.scheduler/1`, ready-set construction, independent schedule seed | Literal scheduler vectors across actor order/process runs; root-seed/schedule-seed isolation; exactly 65,536 selections and 4,096 routing operations/selection pass, plus one fails before excess work or transition; counts are host-independent; stall behavior passes |
+
+### 5.3 internal actor coordinator implementation boundary
+
+The Phase 5.3 implementation integrates validated DSL 2 actor declarations with
+the frozen pure scheduler through an internal, non-exported coordinator. It owns
+one shared scenario state, logical clock, committed history, and artifact list,
+while immutable actor control stacks remain separate engine state. Readiness is
+recomputed by bounded, mutation-free routing before every zero-based selection;
+the selected actor then completes one whole existing transition candidate and
+commit boundary. All-terminal completion succeeds, a nonterminal empty-ready set
+fails closed, and transition failure stops execution without state, clock,
+history, artifact, or actor-position commit. The coordinator's immutable outcome
+is test-only internal data and is not a `scenario.schedule/1`, `scenario.result/2`,
+`scenario.manifest/2`, or `suite.run/2` artifact.
 | **5.4 — Schedule evidence and identity** | `scenario.schedule/1`, canonical records and schedule hash | Canonical-byte/hash vectors; exactly 8 MiB passes and one byte over fails without partial evidence; attempted/committed outcome rules, tamper rejection, immutable bounded evidence pass |
 | **5.5 — Result and manifest v2** | `scenario.result/2` and `scenario.manifest/2` normalization | Exact schema/round-trip/golden vectors; exactly 32 MiB passes and one byte over fails without a partial result; actor/history/artifact order; no Result/1 or Manifest/1 byte drift |
 | **5.6 — Exact schedule replay** | Verify complete Engine 2 coordinates and each recorded selection | Positive exact-byte replay; exactly 65,536 verified selections pass and plus one fails before excess verification or execution; scenario/input/actor/ready-set/selection/seed/version/hash mismatches fail before mismatched commit |

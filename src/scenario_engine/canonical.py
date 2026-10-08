@@ -82,6 +82,7 @@ def canonical_scenario_payload(
         if document.validators: payload["validators"] = _canonical_node(document.validators)
         if document.constraints: payload["constraints"] = _canonical_node(document.constraints)
         if document.invariants: payload["invariants"] = _canonical_node(document.invariants)
+        if document.faults: payload["faults"] = _canonical_node(document.faults)
         if document.oracle is not None: payload["oracle"] = _canonical_node(document.oracle)
         return normalize(payload)
     payload = {

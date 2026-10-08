@@ -33,7 +33,7 @@ MAX_ACTORS = 32
 MAX_STEPS_PER_ACTOR = 256
 MAX_TOTAL_DECLARED_STEPS = 4096
 _V2_REQUIRED_TOP_KEYS = {"dsl_version", "scenario", "clock", "initial_state", "actors"}
-_V2_TOP_KEYS = _V2_REQUIRED_TOP_KEYS | {"resources", "validators", "constraints", "invariants", "oracle"}
+_V2_TOP_KEYS = _V2_REQUIRED_TOP_KEYS | {"resources", "validators", "constraints", "invariants", "faults", "oracle"}
 
 
 class _DSLLoader(yaml.SafeLoader):
@@ -649,10 +649,14 @@ def _parse_v2(root: Mapping[str, Any]) -> ScenarioDocumentV2:
     resources = MappingProxyType({name: _decode_resource(value, f"$.resources.{name}") for name, value in resources_raw.items()})
     constraints = _parse_constraints(root.get("constraints", []))
     invariants = _parse_invariants(root.get("invariants", []))
+    all_steps = tuple(step for actor in actors for step in (
+        actor.steps + tuple(node for flow in actor.subflows.values() for node in flow)
+    ))
+    faults = _parse_faults(root.get("faults", []), all_steps)
     ordered = tuple(sorted(actors, key=lambda item: item.address.encode("utf-8")))
     return ScenarioDocumentV2(2, scenario_id, reference, MappingProxyType(dict(initial)), ordered,
                               resources, _parse_validators(root.get("validators", [])),
-                              constraints, invariants, _parse_oracle(root.get("oracle")))
+                              constraints, invariants, faults, _parse_oracle(root.get("oracle")))
 
 
 def parse_yaml(text: str) -> ScenarioDocument | ScenarioDocumentV2:

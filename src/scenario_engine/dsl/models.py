@@ -75,6 +75,7 @@ class ScenarioDocumentV2:
     validators: tuple[Mapping[str, Any], ...] = ()
     constraints: tuple[Mapping[str, Any], ...] = ()
     invariants: tuple[Mapping[str, Any], ...] = ()
+    faults: tuple[Mapping[str, Any], ...] = ()
     oracle: Mapping[str, Any] | None = None
 
 
