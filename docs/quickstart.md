@@ -73,11 +73,40 @@ written to stdout; `--result-out` is optional, while the replay-authoritative
 Schedule/1 destination is required and must be an absent absolute local path.
 
 ```console
+cat > "$DSE_DEMO/actors.yaml" <<'YAML'
+dsl_version: 2
+scenario: dse_actor_demo
+clock: {start: '2026-01-01T00:00:00Z'}
+initial_state: {count: 0, observed: -1}
+actors:
+  - id: writer
+    steps:
+      - id: increment
+        write: {count: {$add: [{$state: count}, {$literal: 1}]}}
+        transition: null
+  - id: reader
+    steps:
+      - id: observe
+        write: {observed: {$state: count}}
+        transition: null
+YAML
 scenario validate "$DSE_DEMO/actors.yaml"
-scenario --json run "$DSE_DEMO/actors.yaml" --seed generation-seed --schedule-seed 7 --run-index 0 --schedule-out "$DSE_DEMO/schedule.json" --result-out "$DSE_DEMO/result.json"
-scenario --json replay "$DSE_DEMO/result.json" --scenario "$DSE_DEMO/actors.yaml" --schedule "$DSE_DEMO/schedule.json" > "$DSE_DEMO/replayed-result.json"
-cmp "$DSE_DEMO/result.json" "$DSE_DEMO/replayed-result.json"
+scenario --json run "$DSE_DEMO/actors.yaml" --seed generation-seed --schedule-seed 7 --run-index 0 --schedule-out "$DSE_DEMO/schedule.json" --result-out "$DSE_DEMO/result-v2.json"
+scenario --json replay "$DSE_DEMO/result-v2.json" --scenario "$DSE_DEMO/actors.yaml" --schedule "$DSE_DEMO/schedule.json" > "$DSE_DEMO/replayed-result-v2.json"
+python3 - "$DSE_DEMO/result-v2.json" "$DSE_DEMO/replayed-result-v2.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+left, right = (json.loads(Path(path).read_bytes()) for path in sys.argv[1:])
+if left != right:
+    raise SystemExit("replayed Result/2 does not match the canonical result artifact")
+PY
 ```
+
+The comparison parses both JSON documents. The `--result-out` file contains
+canonical Result/2 bytes, while JSON written to terminal stdout has one trailing
+presentation newline; raw byte comparison between those two forms is therefore
+not claimed.
 
 Both outputs are constructed before publication. Each destination is published
 atomically as an absent file; if this command publishes one output and then the
@@ -99,6 +128,8 @@ Omitting `--pack` retains the historical Phase 4 fixture export unchanged.
 ```console
 scenario --json inspect "$DSE_DEMO/result.json" --kind result > "$DSE_DEMO/inspection.json"
 scenario --json explain "$DSE_DEMO/result.json" > "$DSE_DEMO/explanation.json"
+scenario --json inspect "$DSE_DEMO/result-v2.json" --kind result > "$DSE_DEMO/inspection-v2.json"
+scenario --json explain "$DSE_DEMO/result-v2.json" --schedule "$DSE_DEMO/schedule.json" --actor scenario:/actor/writer > "$DSE_DEMO/explanation-v2.json"
 ```
 
 `inspect` summarizes normalized recorded evidence across its supported artifact
@@ -168,7 +199,6 @@ introduce another evidence format.
 
 ```console
 scenario trace-view "$DSE_DEMO/result.json" --out "$DSE_DEMO/trace.html"
-open "$DSE_DEMO/trace.html"
 ```
 
 The source and absent destination are absolute local filesystem paths. The
