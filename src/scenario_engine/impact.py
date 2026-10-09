@@ -10,16 +10,18 @@ import json
 from typing import Any, Iterable, Mapping
 
 from scenario_engine.definition_diff import (
-    DEFINITION_DIFF_CONTRACT, DefinitionChange, DefinitionChangeKind,
+    ACTOR_DEFINITION_DIFF_CONTRACT, DEFINITION_DIFF_CONTRACT, DefinitionChange, DefinitionChangeKind,
     DefinitionDiff, compare_definitions,
 )
 from scenario_engine.diagnostics import semantic_address
 from scenario_engine.dsl import compile_document
-from scenario_engine.dsl.models import ScenarioDocument, StepDocument
+from scenario_engine.dsl.models import ScenarioDocument, ScenarioDocumentV2, StepDocument
 
 
 IMPACT_CONTRACT = "scenario.impact/1"
+ACTOR_IMPACT_CONTRACT = "scenario.impact/2"
 DEPENDENCY_GRAPH_VERSION = "scenario.dependency-graph.dsl1/1"
+ACTOR_DEPENDENCY_GRAPH_VERSION = "scenario.dependency-graph.dsl2/1"
 MAX_IMPACT_NODES = 100_000
 MAX_IMPACT_EDGES = 500_000
 MAX_IMPACT_DEPTH = 256
@@ -30,6 +32,9 @@ class ImpactClassification(str, Enum):
     DIRECT = "DIRECT"
     TRANSITIVE_POSSIBLE = "TRANSITIVE_POSSIBLE"
     UNKNOWN = "UNKNOWN"
+    CONTROL_DEPENDENT = "CONTROL_DEPENDENT"
+    POTENTIAL_CROSS_ACTOR = "POTENTIAL_CROSS_ACTOR"
+    UNKNOWN_OR_UNSUPPORTED = "UNKNOWN_OR_UNSUPPORTED"
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,10 +68,17 @@ class ImpactAnalysis:
         numerator = len(affected)
         denominator = self.eligible_entity_count
         reduced = Fraction(numerator, denominator) if denominator else Fraction(0, 1)
-        counts = {classification.value: 0 for classification in ImpactClassification}
+        actor_aware = self.definition_diff.dsl_version == 2
+        vocabulary = ((ImpactClassification.DIRECT, ImpactClassification.CONTROL_DEPENDENT,
+                       ImpactClassification.POTENTIAL_CROSS_ACTOR, ImpactClassification.UNKNOWN_OR_UNSUPPORTED)
+                      if actor_aware else (ImpactClassification.DIRECT,
+                                           ImpactClassification.TRANSITIVE_POSSIBLE,
+                                           ImpactClassification.UNKNOWN))
+        counts = {classification.value: 0 for classification in vocabulary}
         strongest: dict[str, ImpactClassification] = {}
-        rank = {ImpactClassification.TRANSITIVE_POSSIBLE: 1, ImpactClassification.UNKNOWN: 2,
-                ImpactClassification.DIRECT: 3}
+        rank = {ImpactClassification.TRANSITIVE_POSSIBLE: 1, ImpactClassification.CONTROL_DEPENDENT: 1,
+                ImpactClassification.POTENTIAL_CROSS_ACTOR: 2, ImpactClassification.UNKNOWN: 3,
+                ImpactClassification.UNKNOWN_OR_UNSUPPORTED: 3, ImpactClassification.DIRECT: 4}
         for record in self.records:
             previous = strongest.get(record.affected_semantic_path)
             if previous is None or rank[record.classification] > rank[previous]:
@@ -85,11 +97,11 @@ class ImpactAnalysis:
                        "unknown_means_unaffected": False},
             "definition_diff": {
                 "change_count": len(self.definition_diff.changes),
-                "contract": DEFINITION_DIFF_CONTRACT,
+                "contract": ACTOR_DEFINITION_DIFF_CONTRACT if actor_aware else DEFINITION_DIFF_CONTRACT,
                 "left_hash": self.definition_diff.left_hash,
                 "right_hash": self.definition_diff.right_hash,
             },
-            "dependency_graph": {"identity": DEPENDENCY_GRAPH_VERSION,
+            "dependency_graph": {"identity": ACTOR_DEPENDENCY_GRAPH_VERSION if actor_aware else DEPENDENCY_GRAPH_VERSION,
                                  "uses_semantic_addresses": True},
             "dsl_version": self.definition_diff.dsl_version,
             "impacts": [record.to_jsonable() for record in self.records],
@@ -139,7 +151,7 @@ class _Graph:
 
 
 def _address(*components: tuple[str, str]) -> str:
-    result = semantic_address(*components)
+    result = semantic_address(*components, activate_actor=any(kind == "actor" for kind, _ in components))
     if result is None:
         raise ValueError("impact entity cannot be represented by scenario.semantic-address/1")
     return result
@@ -216,7 +228,7 @@ def _add_step(graph: _Graph, step: StepDocument,
         body = getattr(step, step.control_kind)
         _expression_edges(graph, body, control, base, "CONTROL_EXPRESSION")
         for target in _control_targets(step):
-            graph.edge(control, _address(("x-subflow", target)), "CONTROL_SUBFLOW")
+            graph.edge(control, _address(*prefix, ("x-subflow", target)), "CONTROL_SUBFLOW")
 
 
 def _graph(document: ScenarioDocument) -> _Graph:
@@ -276,6 +288,43 @@ def _graph(document: ScenarioDocument) -> _Graph:
     return graph
 
 
+def _graph_v2(document: ScenarioDocumentV2) -> _Graph:
+    graph = _Graph()
+    graph.node(_address(("x-definition", "scenario")))
+    graph.node(_address(("x-definition", "clock")))
+    initial = graph.node(_address(("x-definition", "initial-state")))
+    for name in document.initial_state:
+        graph.edge(initial, _address(("state", name)), "INITIAL_STATE_FIELD")
+    for name in document.resources:
+        graph.node(_address(("resource", name)))
+    for item in document.constraints:
+        path = graph.node(_address(("constraint", str(item["id"]))))
+        _expression_edges(graph, item["check"], path, (), "CONSTRAINT_REFERENCE")
+    for item in document.invariants:
+        path = graph.node(_address(("invariant", str(item["id"]))))
+        _expression_edges(graph, item["check"], path, (), "INVARIANT_REFERENCE")
+    for actor in document.actors:
+        prefix = (("actor", actor.actor_id),)
+        actor_path = graph.node(_address(*prefix))
+        for step in actor.steps:
+            graph.edge(actor_path, _address(*prefix, ("step", step.step_id)), "ACTOR_MEMBER")
+            _add_step(graph, step, prefix)
+        for subflow, steps in actor.subflows.items():
+            root = graph.node(_address(*prefix, ("x-subflow", subflow)))
+            for step in steps:
+                graph.edge(root, _address(*prefix, ("x-subflow", subflow), ("step", step.step_id)),
+                           "SUBFLOW_MEMBER")
+                _add_step(graph, step, (*prefix, ("x-subflow", subflow)))
+    return graph
+
+
+def _actor_scope(path: str) -> str | None:
+    marker = "scenario:/actor/"
+    if not path.startswith(marker):
+        return None
+    return path.split("/step/", 1)[0].split("/x-subflow/", 1)[0]
+
+
 def _paths_for_change(change: DefinitionChange, before: _Graph, target: _Graph) -> tuple[str, ...]:
     selected = target if change.change_kind is DefinitionChangeKind.ADDED else before if change.change_kind is DefinitionChangeKind.REMOVED else None
     nodes = selected.nodes if selected is not None else before.nodes | target.nodes
@@ -286,14 +335,19 @@ def _paths_for_change(change: DefinitionChange, before: _Graph, target: _Graph) 
 def analyze_impact(left: ScenarioDocument, right: ScenarioDocument,
                    definition_diff: DefinitionDiff | None = None) -> ImpactAnalysis:
     """Analyze conservative static impact using the authoritative structural diff."""
-    if not isinstance(left, ScenarioDocument) or not isinstance(right, ScenarioDocument):
-        raise TypeError("impact inputs must be ScenarioDocument values")
+    supported = (ScenarioDocument, ScenarioDocumentV2)
+    if not isinstance(left, supported) or not isinstance(right, supported):
+        raise TypeError("impact inputs must be validated scenario document values")
+    if type(left) is not type(right):
+        raise ValueError("impact does not support cross-DSL-major comparison")
     compile_document(left); compile_document(right)
     authoritative = compare_definitions(left, right)
     if definition_diff is not None and definition_diff != authoritative:
         raise ValueError("impact definition diff does not match validated definitions")
     difference = authoritative if definition_diff is None else definition_diff
-    before, target = _graph(left), _graph(right)
+    actor_aware = isinstance(left, ScenarioDocumentV2)
+    before, target = ((_graph_v2(left), _graph_v2(right)) if actor_aware else
+                      (_graph(left), _graph(right)))
     union = _Graph(); union.merge(before); union.merge(target)
     records: list[ImpactRecord] = []
     for change in difference.changes:
@@ -313,9 +367,19 @@ def analyze_impact(left: ScenarioDocument, right: ScenarioDocument,
                     visited.add(state); queue.append((edge.target, next_uncertain, depth + 1))
                 if edge.target in direct:
                     continue
-                classification = ImpactClassification.UNKNOWN if next_uncertain else ImpactClassification.TRANSITIVE_POSSIBLE
+                if next_uncertain:
+                    classification = (ImpactClassification.UNKNOWN_OR_UNSUPPORTED if actor_aware
+                                      else ImpactClassification.UNKNOWN)
+                elif actor_aware and _actor_scope(change.semantic_path) is not None and _actor_scope(edge.target) is not None and _actor_scope(change.semantic_path) != _actor_scope(edge.target):
+                    classification = ImpactClassification.POTENTIAL_CROSS_ACTOR
+                elif actor_aware and (edge.kind.startswith("CONTROL") or "TRANSITION" in edge.kind):
+                    classification = ImpactClassification.CONTROL_DEPENDENT
+                else:
+                    classification = (ImpactClassification.UNKNOWN_OR_UNSUPPORTED if actor_aware
+                                      else ImpactClassification.TRANSITIVE_POSSIBLE)
                 previous = best.get(edge.target)
-                if previous is None or (classification is ImpactClassification.UNKNOWN and previous[0] is ImpactClassification.TRANSITIVE_POSSIBLE):
+                if previous is None or classification in (ImpactClassification.UNKNOWN,
+                                                           ImpactClassification.UNKNOWN_OR_UNSUPPORTED):
                     best[edge.target] = (classification, "OPAQUE_OR_UNRESOLVED_DEPENDENCY" if next_uncertain else edge.kind)
         for path, (classification, reason) in best.items():
             records.append(ImpactRecord(change, path, classification, reason))
@@ -325,7 +389,8 @@ def analyze_impact(left: ScenarioDocument, right: ScenarioDocument,
                                    item.source_change.change_kind.value,
                                    item.affected_semantic_path.encode("utf-8"),
                                    item.classification.value, item.dependency_kind))
-    return ImpactAnalysis(difference, tuple(records), len(union.nodes))
+    return ImpactAnalysis(difference, tuple(records), len(union.nodes),
+                          ACTOR_IMPACT_CONTRACT if actor_aware else IMPACT_CONTRACT)
 
 
 def render_impact_analysis(analysis: ImpactAnalysis) -> str:
@@ -339,5 +404,5 @@ def render_impact_analysis(analysis: ImpactAnalysis) -> str:
     return "\n".join(lines)
 
 
-__all__ = ["DEPENDENCY_GRAPH_VERSION", "IMPACT_CONTRACT", "ImpactAnalysis",
+__all__ = ["ACTOR_DEPENDENCY_GRAPH_VERSION", "ACTOR_IMPACT_CONTRACT", "DEPENDENCY_GRAPH_VERSION", "IMPACT_CONTRACT", "ImpactAnalysis",
            "ImpactClassification", "ImpactRecord", "analyze_impact", "render_impact_analysis"]

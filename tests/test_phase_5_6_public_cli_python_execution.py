@@ -110,11 +110,13 @@ def test_invalid_secret_like_schedule_seed_is_redacted(tmp_path: Path) -> None:
     assert json.loads(rejected.stderr)["code"] == "SCHEDULE_SEED_INVALID"
 
 
-def test_engine2_inspection_is_stably_unsupported(tmp_path: Path) -> None:
+def test_engine2_inspection_dispatches_to_actor_aware_contract(tmp_path: Path) -> None:
     source = tmp_path / "scenario.yaml"; source.write_text(SCENARIO, encoding="utf-8")
     schedule = tmp_path / "schedule.json"; result = tmp_path / "result.json"
     assert invoke("--json", "run", str(source), "--seed", "generation", "--schedule-seed", "7",
                   "--schedule-out", str(schedule), "--result-out", str(result)).returncode == 0
-    rejected = invoke("--json", "inspect", str(result), "--kind", "result")
-    envelope = json.loads(rejected.stderr)
-    assert rejected.returncode == 3 and envelope["code"] == "ENGINE2_OPERATION_UNSUPPORTED"
+    inspected = invoke("--json", "inspect", str(result), "--kind", "result")
+    payload = json.loads(inspected.stdout)
+    assert inspected.returncode == 0 and inspected.stderr == b""
+    assert payload["schema_version"] == "inspection.document/2"
+    assert payload["target_kind"] == "engine2_result"

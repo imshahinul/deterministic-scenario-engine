@@ -5,14 +5,25 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from scenario_engine.result import ScenarioResult
+from scenario_engine.engine2 import Engine2Result
+from scenario_engine.schedule import ScheduleArtifact
 from scenario_engine.suite import ArtifactOrigin, ArtifactReadModel
 
 from .errors import UnsupportedInspectionTargetError
-from .models import EvidenceAvailability, ExplanationRecord, MAX_EXPLANATION_RECORDS
+from .models import (
+    ACTOR_EXPLANATION_SCHEMA_VERSION, EvidenceAvailability, ExplanationRecord,
+    MAX_EXPLANATION_RECORDS,
+)
 from .redaction import redact_mapping, validate_redacted_keys
 
 
-def explain_result(target: ScenarioResult | ArtifactReadModel) -> tuple[ExplanationRecord, ...]:
+def explain_result(target: ScenarioResult | ArtifactReadModel | Engine2Result, *,
+                   schedule: ScheduleArtifact | None = None,
+                   actor: str | None = None) -> tuple[ExplanationRecord, ...]:
+    if isinstance(target, Engine2Result):
+        return _explain_engine2(target, schedule=schedule, actor=actor)
+    if schedule is not None or actor is not None:
+        raise UnsupportedInspectionTargetError("schedule and actor filters require Engine2Result")
     if isinstance(target, ScenarioResult):
         value = target.normalized()
     elif isinstance(target, ArtifactReadModel) and target.origin is ArtifactOrigin.V1_RESULT:
@@ -52,6 +63,58 @@ def explain_result(target: ScenarioResult | ArtifactReadModel) -> tuple[Explanat
         from .errors import InspectionBoundError
         raise InspectionBoundError(f"explanation exceeds {MAX_EXPLANATION_RECORDS} records")
     return tuple(result)
+
+
+def _explain_engine2(target: Engine2Result, *, schedule: ScheduleArtifact | None,
+                     actor: str | None) -> tuple[ExplanationRecord, ...]:
+    if actor is not None and actor not in {item["actor"] for item in target.actors}:
+        raise UnsupportedInspectionTargetError("actor filter is not declared by result evidence")
+    if schedule is not None and (schedule.schedule_hash != target.schedule_reference.schedule_hash or
+                                 schedule.scenario_hash != target.manifest.scenario_hash):
+        raise UnsupportedInspectionTargetError("schedule does not match result evidence")
+    value = redact_mapping(target.payload(), validate_redacted_keys(None))
+    records: list[ExplanationRecord] = []
+    selections = {item.committed_history_length: item for item in schedule.records
+                  if item.outcome == "COMMITTED"} if schedule is not None else {}
+    for index, history in enumerate(value["history"]):
+        if actor is not None and history["actor"] != actor:
+            continue
+        selection = selections.get(index)
+        details = {key: history[key] for key in (
+            "actor", "timestamp", "transition", "pre", "post", "patch", "faults_applied", "artifacts"
+        )}
+        details["global_committed_history_index"] = index
+        if selection is not None:
+            details["schedule_selection"] = {
+                "logical_clock": selection.logical_clock, "ready_actors": selection.ready_actors,
+                "selection_ordinal": selection.selection_ordinal,
+            }
+        records.append(ExplanationRecord(
+            "committed_transition", f"/history/{index}", history["address"], history["address"],
+            "committed", details, schema_version=ACTOR_EXPLANATION_SCHEMA_VERSION,
+        ))
+    if schedule is not None:
+        for selection in schedule.records:
+            if selection.outcome != "FAILED" or (actor is not None and selection.selected_actor != actor):
+                continue
+            records.append(ExplanationRecord(
+                "attempted_selection", f"/schedule/records/{selection.selection_ordinal}",
+                selection.selected_actor, selection.selected_actor, "failed",
+                {"committed_history_length": selection.committed_history_length,
+                 "logical_clock": selection.logical_clock, "ready_actors": selection.ready_actors,
+                 "selection_ordinal": selection.selection_ordinal,
+                 "statement": "selection did not commit a transition"},
+                schema_version=ACTOR_EXPLANATION_SCHEMA_VERSION,
+            ))
+    records.append(ExplanationRecord(
+        "terminal_classification", None, None, target.scenario_id, target.classification.lower(),
+        {"failure": value["failure"], "schedule_context": "available" if schedule else "unavailable"},
+        schema_version=ACTOR_EXPLANATION_SCHEMA_VERSION,
+    ))
+    if len(records) > MAX_EXPLANATION_RECORDS:
+        from .errors import InspectionBoundError
+        raise InspectionBoundError(f"explanation exceeds {MAX_EXPLANATION_RECORDS} records")
+    return tuple(records)
 
 
 def _provenance(record: Mapping[str, Any], index: int, scenario_id: str) -> ExplanationRecord:

@@ -14,6 +14,8 @@ from .errors import InspectionBoundError, InspectionSchemaError
 
 INSPECTION_SCHEMA_VERSION = "inspection.document/1"
 EXPLANATION_SCHEMA_VERSION = "inspection.explanation/1"
+ACTOR_INSPECTION_SCHEMA_VERSION = "inspection.document/2"
+ACTOR_EXPLANATION_SCHEMA_VERSION = "inspection.explanation/2"
 MAX_INSPECTION_SECTIONS = 32
 MAX_INSPECTION_RECORDS = 100_000
 MAX_EXPLANATION_RECORDS = 100_000
@@ -96,7 +98,7 @@ class InspectionDocument:
     schema_version: str = INSPECTION_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
-        if self.schema_version != INSPECTION_SCHEMA_VERSION:
+        if self.schema_version not in (INSPECTION_SCHEMA_VERSION, ACTOR_INSPECTION_SCHEMA_VERSION):
             raise InspectionSchemaError(f"unsupported inspection schema: {self.schema_version}")
         if not isinstance(self.target_kind, str) or not self.target_kind:
             raise InspectionSchemaError("target_kind must be nonempty")
@@ -131,7 +133,7 @@ class ExplanationRecord:
     schema_version: str = EXPLANATION_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
-        if self.schema_version != EXPLANATION_SCHEMA_VERSION:
+        if self.schema_version not in (EXPLANATION_SCHEMA_VERSION, ACTOR_EXPLANATION_SCHEMA_VERSION):
             raise InspectionSchemaError(f"unsupported explanation schema: {self.schema_version}")
         for name in ("kind", "subject_id", "outcome"):
             if not isinstance(getattr(self, name), str) or not getattr(self, name):

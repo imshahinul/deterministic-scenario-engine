@@ -38,7 +38,7 @@ from scenario_engine.dsl import (
 from scenario_engine.errors import ScenarioEngineError
 from scenario_engine.engine2 import (
     Engine2EvidenceBoundError, Engine2EvidenceError, Engine2ReplayMismatch,
-    canonical_result2_bytes, execute_engine2, replay_engine2,
+    canonical_result2_bytes, execute_engine2, read_manifest2, read_result2, replay_engine2,
 )
 from scenario_engine.evidence import (
     BUNDLE_INDEX_FILENAME, ArtifactDescriptor, EvidenceBoundError, EvidenceContractError,
@@ -61,7 +61,7 @@ from scenario_engine.manifest import (
 from scenario_engine.resources import ResourceResolutionError
 from scenario_engine.schedule import (
     MAX_SCHEDULE_SEED, ScheduleBoundError, ScheduleError, ScheduleReplayMismatch,
-    canonical_schedule_bytes,
+    canonical_schedule_bytes, read_schedule,
 )
 from scenario_engine.scaffolding import (
     DEFAULT_SCAFFOLD_PROVIDER, ScaffoldError, ScaffoldRequest, scaffold_scenario,
@@ -246,7 +246,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     inspect_command.add_argument("source", help="local artifact JSON path or - for stdin")
     inspect_command.add_argument(
-        "--kind", choices=("result", "manifest", "suite"), default="result",
+        "--kind", choices=("result", "manifest", "schedule", "suite"), default="result",
         help="artifact contract",
     )
 
@@ -255,6 +255,8 @@ def _parser() -> argparse.ArgumentParser:
         description="Explain available causal step and state-change evidence from a supported result without inventing missing facts.",
     )
     explain.add_argument("source", help="local result JSON path or - for stdin")
+    explain.add_argument("--schedule", help="matching local scenario.schedule/1 for selection context")
+    explain.add_argument("--actor", help="canonical actor address used as a stable history filter")
 
     difference = commands.add_parser(
         "diff", help="compare two recorded execution artifacts (not scenario definitions)",
@@ -281,8 +283,9 @@ def _parser() -> argparse.ArgumentParser:
     impact = commands.add_parser(
         "impact", help="conservatively analyze possible impact of definition changes",
         description=("Statically analyze two validated scenario definitions using their authoritative "
-                     "structural diff. Classifications are DIRECT, TRANSITIVE_POSSIBLE, and "
-                     "UNKNOWN. Reports are may-impact only: UNKNOWN does not mean unaffected "
+                     "structural diff. DSL 1 classifications are DIRECT, TRANSITIVE_POSSIBLE, and "
+                     "UNKNOWN; DSL 2 adds CONTROL_DEPENDENT, POTENTIAL_CROSS_ACTOR, and "
+                     "UNKNOWN_OR_UNSUPPORTED. Reports are may-impact only: UNKNOWN does not mean unaffected "
                      "(UNKNOWN != UNAFFECTED), "
                      "and amplification is an affected-entity fraction, not a probability. No "
                      "behavioral-equivalence claim is made."),
@@ -952,12 +955,22 @@ def _hash(args: argparse.Namespace) -> tuple[bytes, bytes]:
 
 def _artifact(source: str, kind: str, stdin_used: list[bool] | None = None) -> Any:
     data = _read(source, stdin_used=stdin_used)
-    if _json_contract(data) in ("scenario.result/2", "scenario.manifest/2", "suite.run/2"):
+    contract = _json_contract(data)
+    if contract == "scenario.result/2" and kind == "result":
+        return read_result2(data)
+    if contract == "scenario.manifest/2" and kind == "manifest":
+        return read_manifest2(data)
+    if contract == "scenario.schedule/1" and kind == "schedule":
+        return read_schedule(data)
+    if contract == "suite.run/2":
         raise _CLIError(
-            "Engine 2 inspection, explanation, diff, and suite operations are not supported by this checkpoint",
+            "suite.run/2 analysis is not supported by this checkpoint",
             CLIExitCode.VALIDATION, diagnostic_code="ENGINE2_OPERATION_UNSUPPORTED",
-            category="COMMAND", remediation="USE_ENGINE2_RUN_OR_EXACT_REPLAY",
+            category="COMMAND", remediation="USE_SUPPORTED_NATIVE_EVIDENCE",
         )
+    if contract in ("scenario.result/2", "scenario.manifest/2", "scenario.schedule/1"):
+        raise _CLIError("artifact contract does not match --kind", CLIExitCode.VALIDATION,
+                        diagnostic_code="ENGINE2_CONTRACT_KIND_MISMATCH", category="COMMAND")
     if kind == "result":
         return read_v1_result_bytes(data)
     if kind == "manifest":
@@ -971,7 +984,9 @@ def _inspect(args: argparse.Namespace) -> tuple[bytes, bytes]:
 
 
 def _explain(args: argparse.Namespace) -> tuple[bytes, bytes]:
-    data = canonical_explanation_bytes(explain_result(_artifact(args.source, "result")))
+    target = _artifact(args.source, "result")
+    schedule = _artifact(args.schedule, "schedule") if args.schedule else None
+    data = canonical_explanation_bytes(explain_result(target, schedule=schedule, actor=args.actor))
     return data, _pretty(data)
 
 

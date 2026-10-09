@@ -806,3 +806,58 @@ NEXT_ACTIVITY=MANDATORY_STOP
 Successful scope freeze is not implementation authorization. Do not implement
 Phase 5.1, change production code, change current version values, or publish a
 release as part of this checkpoint.
+
+## 18. Phase 5.7 actor-aware analysis contract amendment
+
+The owner-authorized Phase 5.7 analysis checkpoint preserves every Engine 1
+byte and the frozen `inspection.document/1`, `inspection.explanation/1`,
+`scenario.definition-diff/1`, and `scenario.impact/1` meanings. Actor-aware
+outputs use the smallest additive major envelopes:
+
+```text
+inspection.document/2
+inspection.explanation/2
+scenario.definition-diff/2
+scenario.impact/2
+scenario.dependency-graph.dsl2/1
+```
+
+The existing Python inspection entry points dispatch by validated evidence
+type. Engine 2 Result/2 and Manifest/2 readers establish structural validity
+and canonical hash consistency; Schedule/1 uses its strict canonical reader.
+Actor-aware inspection reports those properties separately from exact replay
+verification. It reports exact replay as `not_requested` unless the caller
+explicitly invokes the existing Phase 5 replay API with the complete scenario,
+schedule, inputs, and other required coordinates. Static inspection and
+explanation never execute a scenario.
+
+Result/2 explanation preserves global committed-history order. An optional
+validated Schedule/1 supplies selection context. Selection ordinal and committed
+history index remain distinct, and a failed final selection is represented only
+as an attempted selection; no committed transition is synthesized. Per-actor
+views are stable filters over the global order. State values remain subject to
+the existing recursive secret-key redaction policy.
+
+Definition Diff/2 compares validated DSL 2 actors by canonical
+`scenario.semantic-address/1` identity. Actor additions/removals are whole-actor
+changes; different actor addresses are never paired by body similarity, so a
+rename is conservatively one removal plus one addition. Actor steps and
+actor-owned control flow retain executable sequence meaning, while YAML mapping
+order and layout do not. DSL-major-mismatched comparisons fail closed.
+
+Impact/2 is static, bounded, and conservative. Its public classifications are
+`DIRECT`, `CONTROL_DEPENDENT`, `POTENTIAL_CROSS_ACTOR`, and
+`UNKNOWN_OR_UNSUPPORTED`. Shared-state read/write evidence may connect actors,
+but such a connection is only a possible effect and proves neither a race nor
+real concurrent execution. Opaque or incomplete dependency knowledge produces
+`UNKNOWN_OR_UNSUPPORTED`; the report has no unaffected or independence verdict.
+Every finding records its source change and a static dependency kind. Traversal
+retains the Phase 4 node, edge, depth, and report-record ceilings.
+
+Unknown contracts and cross-major analysis inputs fail closed. Engine 2
+inspection accepts only hash-consistent native evidence and does not migrate,
+repair, promote, or edit it. The existing semantic-address depth/byte bounds,
+inspection bounds, analysis graph bounds, evidence byte/depth/count bounds, and
+redaction rules remain authoritative. Phase 5.7 adds no trace-view rendering,
+schedule exploration, race detection, suite/matrix/batch execution, or version
+metadata change.

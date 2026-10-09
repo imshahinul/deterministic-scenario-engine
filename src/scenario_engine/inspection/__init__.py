@@ -7,9 +7,11 @@ from .errors import (
 from .explain import explain_result
 from .inspect import (
     inspect, inspect_batch, inspect_failure, inspect_manifest, inspect_matrix,
-    inspect_result, inspect_suite,
+    inspect_result, inspect_suite, inspect_engine2_manifest, inspect_engine2_result,
+    inspect_schedule,
 )
 from .models import (
+    ACTOR_EXPLANATION_SCHEMA_VERSION, ACTOR_INSPECTION_SCHEMA_VERSION,
     EXPLANATION_SCHEMA_VERSION, INSPECTION_SCHEMA_VERSION, MAX_EXPLANATION_RECORDS,
     MAX_INSPECTION_BYTES, MAX_INSPECTION_DEPTH, MAX_INSPECTION_RECORDS,
     MAX_INSPECTION_SECTIONS, EvidenceAvailability, EvidenceValue, ExplanationRecord,

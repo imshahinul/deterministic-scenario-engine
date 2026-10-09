@@ -1,4 +1,4 @@
-"""Deterministic structural comparison of validated DSL 1 scenario definitions."""
+"""Deterministic structural comparison of validated DSL 1 and DSL 2 definitions."""
 
 from __future__ import annotations
 
@@ -10,11 +10,12 @@ from typing import Any, Iterable, Mapping
 from scenario_engine.canonical import canonical_scenario_hash
 from scenario_engine.diagnostics import semantic_address
 from scenario_engine.dsl import compile_document
-from scenario_engine.dsl.models import ScenarioDocument, StepDocument
+from scenario_engine.dsl.models import ActorDocument, ScenarioDocument, ScenarioDocumentV2, StepDocument
 from scenario_engine.values import normalize
 
 
 DEFINITION_DIFF_CONTRACT = "scenario.definition-diff/1"
+ACTOR_DEFINITION_DIFF_CONTRACT = "scenario.definition-diff/2"
 MAX_DEFINITION_CHANGES = 100_000
 
 
@@ -76,7 +77,7 @@ class DefinitionDiff:
 
 
 def _address(*components: tuple[str, str]) -> str:
-    value = semantic_address(*components)
+    value = semantic_address(*components, activate_actor=any(kind == "actor" for kind, _ in components))
     if value is None:
         raise ValueError("definition entity cannot be represented by scenario.semantic-address/1")
     return value
@@ -160,10 +161,15 @@ def _compare_steps(changes: list[DefinitionChange], left: tuple[StepDocument, ..
 
 def compare_definitions(left: ScenarioDocument, right: ScenarioDocument) -> DefinitionDiff:
     """Compare two definitions after ordinary parser/compiler validation, without execution."""
-    if not isinstance(left, ScenarioDocument) or not isinstance(right, ScenarioDocument):
-        raise TypeError("definition diff inputs must be ScenarioDocument values")
+    supported = (ScenarioDocument, ScenarioDocumentV2)
+    if not isinstance(left, supported) or not isinstance(right, supported):
+        raise TypeError("definition diff inputs must be validated scenario document values")
+    if type(left) is not type(right):
+        raise ValueError("definition diff does not support cross-DSL-major comparison")
     compile_document(left)
     compile_document(right)
+    if isinstance(left, ScenarioDocumentV2) and isinstance(right, ScenarioDocumentV2):
+        return _compare_actor_definitions(left, right)
     changes: list[DefinitionChange] = []
     _record(changes, _address(("x-definition", "scenario")), left.scenario_id, right.scenario_id)
     _record(changes, _address(("x-definition", "clock")), left.reference_clock_start, right.reference_clock_start)
@@ -193,6 +199,53 @@ def compare_definitions(left: ScenarioDocument, right: ScenarioDocument) -> Defi
     )
 
 
+def _actor_value(actor: ActorDocument) -> Mapping[str, Any]:
+    return normalize({
+        "steps": [_step_value(step) for step in actor.steps],
+        "subflows": {name: [_step_value(step) for step in actor.subflows[name]]
+                     for name in sorted(actor.subflows)},
+    })
+
+
+def _compare_actor_definitions(left: ScenarioDocumentV2, right: ScenarioDocumentV2) -> DefinitionDiff:
+    changes: list[DefinitionChange] = []
+    _record(changes, _address(("x-definition", "scenario")), left.scenario_id, right.scenario_id)
+    _record(changes, _address(("x-definition", "clock")), left.reference_clock_start, right.reference_clock_start)
+    _record(changes, _address(("x-definition", "initial-state")), left.initial_state, right.initial_state)
+    _compare_mapping(changes, (), "resource", left.resources, right.resources)
+    _compare_keyed(changes, "constraint", left.constraints, right.constraints)
+    _compare_keyed(changes, "invariant", left.invariants, right.invariants)
+    _compare_keyed(changes, "fault", left.faults, right.faults)
+    _compare_keyed(changes, "x-validator", left.validators, right.validators)
+    _record(changes, _address(("oracle", "expectation")), left.oracle, right.oracle)
+    left_actors = {actor.address: actor for actor in left.actors}
+    right_actors = {actor.address: actor for actor in right.actors}
+    for address in sorted(set(left_actors) | set(right_actors), key=str.encode):
+        actor_id = (left_actors.get(address) or right_actors[address]).actor_id
+        base = (("actor", actor_id),)
+        if address not in left_actors:
+            _record(changes, _address(*base), None, _actor_value(right_actors[address]), before_present=False)
+            continue
+        if address not in right_actors:
+            _record(changes, _address(*base), _actor_value(left_actors[address]), None, after_present=False)
+            continue
+        before, after = left_actors[address], right_actors[address]
+        _compare_steps(changes, before.steps, after.steps, base)
+        for subflow in sorted(set(before.subflows) | set(after.subflows)):
+            path = _address(*base, ("x-subflow", subflow))
+            if subflow not in before.subflows:
+                _record(changes, path, None, [_step_value(step) for step in after.subflows[subflow]], before_present=False)
+            elif subflow not in after.subflows:
+                _record(changes, path, [_step_value(step) for step in before.subflows[subflow]], None, after_present=False)
+            else:
+                _compare_steps(changes, before.subflows[subflow], after.subflows[subflow],
+                               (*base, ("x-subflow", subflow)))
+    changes.sort(key=lambda change: (change.semantic_path.encode("utf-8"), change.change_kind.value))
+    return DefinitionDiff(left.scenario_id, right.scenario_id, canonical_scenario_hash(left),
+                          canonical_scenario_hash(right), 2, tuple(changes),
+                          ACTOR_DEFINITION_DIFF_CONTRACT)
+
+
 def render_definition_diff(diff: DefinitionDiff) -> str:
     lines = [f"scenario definition structural diff: {len(diff.changes)} change(s)"]
     for change in diff.changes:
@@ -205,6 +258,6 @@ def render_definition_diff(diff: DefinitionDiff) -> str:
 
 
 __all__ = [
-    "DEFINITION_DIFF_CONTRACT", "DefinitionChange", "DefinitionChangeKind",
+    "ACTOR_DEFINITION_DIFF_CONTRACT", "DEFINITION_DIFF_CONTRACT", "DefinitionChange", "DefinitionChangeKind",
     "DefinitionDiff", "compare_definitions", "render_definition_diff",
 ]

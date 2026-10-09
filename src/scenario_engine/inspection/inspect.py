@@ -11,6 +11,8 @@ from scenario_engine.composition.models import ComposedExecution, ComposedSuite
 from scenario_engine.manifest import ReproducibilityManifest
 from scenario_engine.matrix.models import MatrixExecution, MatrixPlan
 from scenario_engine.result import ScenarioResult
+from scenario_engine.engine2 import Engine2Manifest, Engine2Result
+from scenario_engine.schedule import ScheduleArtifact
 from scenario_engine.suite import (
     ArtifactOrigin, ArtifactReadModel, ArtifactReference, BatchItemResult,
     BatchManifest, BatchResultEnvelope, CompatibilityRecord, FailureRecord,
@@ -18,7 +20,10 @@ from scenario_engine.suite import (
 )
 
 from .errors import UnsupportedInspectionTargetError
-from .models import EvidenceAvailability, EvidenceValue, InspectionDocument, InspectionSection
+from .models import (
+    ACTOR_INSPECTION_SCHEMA_VERSION, EvidenceAvailability, EvidenceValue,
+    InspectionDocument, InspectionSection,
+)
 from .redaction import redact_mapping, validate_redacted_keys
 
 
@@ -34,8 +39,88 @@ def _redacted(reason: str) -> EvidenceValue:
     return EvidenceValue(EvidenceAvailability.REDACTED, reason=reason)
 
 
-def _document(kind: str, sections: Iterable[tuple[str, EvidenceValue]]) -> InspectionDocument:
-    return InspectionDocument(kind, tuple(InspectionSection(name, value) for name, value in sections))
+def _document(kind: str, sections: Iterable[tuple[str, EvidenceValue]], *, schema_version: str | None = None) -> InspectionDocument:
+    values = tuple(InspectionSection(name, value) for name, value in sections)
+    return InspectionDocument(kind, values) if schema_version is None else InspectionDocument(kind, values, schema_version)
+
+
+def _engine2_integrity(contract: str) -> Mapping[str, Any]:
+    return {
+        "canonical_hash_consistent": True,
+        "exact_replay": "not_requested",
+        "structurally_valid": True,
+        "verified_contract": contract,
+    }
+
+
+def inspect_engine2_manifest(target: Engine2Manifest) -> InspectionDocument:
+    if not isinstance(target, Engine2Manifest):
+        raise UnsupportedInspectionTargetError("inspect_engine2_manifest requires Engine2Manifest")
+    return _document("engine2_manifest", (
+        ("schema_identity", _available({"contract": target.contract, "dsl_version": target.dsl_version,
+                                         "engine_version": target.engine_version,
+                                         "manifest_hash": target.manifest_hash})),
+        ("scenario_identity", _available({"scenario_canonical_hash": target.scenario_hash})),
+        ("execution_context", _available({"locale": target.locale,
+            "reference_clock_start": target.reference_clock_start, "root_seed": target.root_seed,
+            "run_index": target.run_index, "schedule_seed": target.schedule_seed})),
+        ("scheduler", _available({"contract": target.scheduler_contract})),
+        ("input_resource_hashes", _available(target.input_resource_hashes)),
+        ("integrity", _available(_engine2_integrity(target.contract))),
+    ), schema_version=ACTOR_INSPECTION_SCHEMA_VERSION)
+
+
+def inspect_schedule(target: ScheduleArtifact) -> InspectionDocument:
+    if not isinstance(target, ScheduleArtifact):
+        raise UnsupportedInspectionTargetError("inspect_schedule requires ScheduleArtifact")
+    committed = {actor: 0 for actor in target.actors}
+    for record in target.records:
+        if record.outcome == "COMMITTED":
+            committed[record.selected_actor] += 1
+    return _document("engine2_schedule", (
+        ("schema_identity", _available({"contract": target.contract,
+            "dsl_version": target.execution.dsl_version, "engine_version": target.execution.engine_version,
+            "schedule_hash": target.schedule_hash})),
+        ("scenario_identity", _available({"scenario_canonical_hash": target.scenario_hash})),
+        ("scheduler", _available({"contract": target.scheduler_contract,
+            "schedule_seed": target.schedule_seed, "selection_count": len(target.records)})),
+        ("generation", _available({"root_seed": target.execution.root_seed})),
+        ("actors", _available([{"actor": actor, "committed_transition_count": committed[actor]}
+                                for actor in target.actors])),
+        ("selections", _available([record.payload() for record in target.records])),
+        ("terminal", _available({"classification": target.classification,
+            "failure": None if target.failure is None else target.failure.payload()})),
+        ("integrity", _available(_engine2_integrity(target.contract))),
+    ), schema_version=ACTOR_INSPECTION_SCHEMA_VERSION)
+
+
+def inspect_engine2_result(target: Engine2Result) -> InspectionDocument:
+    if not isinstance(target, Engine2Result):
+        raise UnsupportedInspectionTargetError("inspect_engine2_result requires Engine2Result")
+    value = redact_mapping(target.payload(), validate_redacted_keys(None))
+    counts = {item["actor"]: 0 for item in value["actors"]}
+    for item in value["history"]:
+        counts[item["actor"]] += 1
+    return _document("engine2_result", (
+        ("schema_identity", _available({"contract": target.contract,
+            "dsl_version": target.manifest.dsl_version, "engine_version": target.manifest.engine_version,
+            "manifest_hash": target.manifest.manifest_hash, "result_hash": target.result_hash})),
+        ("scenario_identity", _available({"scenario_canonical_hash": target.manifest.scenario_hash,
+                                           "scenario_id": target.scenario_id})),
+        ("scheduler", _available({"contract": target.manifest.scheduler_contract,
+            "schedule_hash": target.schedule_reference.schedule_hash,
+            "schedule_seed": target.manifest.schedule_seed})),
+        ("generation", _available({"root_seed": target.manifest.root_seed})),
+        ("actors", _available([{"actor": item["actor"], "committed_transition_count": counts[item["actor"]],
+            "next_step": item["next_step"], "terminal": item["terminal"]} for item in value["actors"]])),
+        ("history_summary", _available({"global_committed_transition_count": len(value["history"])})),
+        ("history", _available(value["history"])),
+        ("final_state", _available(value["final_state"])),
+        ("final_logical_clock", _available(value["final_logical_clock"])),
+        ("outcome", _available({"classification": value["classification"], "failure": value["failure"]})),
+        ("provenance", _available(value["provenance"])),
+        ("integrity", _available(_engine2_integrity(target.contract))),
+    ), schema_version=ACTOR_INSPECTION_SCHEMA_VERSION)
 
 
 def _reference(value: ArtifactReference | None) -> Any:
@@ -328,6 +413,12 @@ def _record(value: Any) -> Mapping[str, Any]:
 
 def inspect(target: Any, **kwargs: Any) -> InspectionDocument:
     """Compact explicit dispatcher over all supported already-recorded target kinds."""
+    if isinstance(target, Engine2Result):
+        return inspect_engine2_result(target)
+    if isinstance(target, Engine2Manifest):
+        return inspect_engine2_manifest(target)
+    if isinstance(target, ScheduleArtifact):
+        return inspect_schedule(target)
     if isinstance(target, (ScenarioResult, ArtifactReadModel)):
         if isinstance(target, ArtifactReadModel) and target.origin is ArtifactOrigin.V1_MANIFEST:
             return inspect_manifest(target)
