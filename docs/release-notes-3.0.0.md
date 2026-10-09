@@ -1,7 +1,11 @@
-# Deterministic Scenario Engine 3.0.0 candidate
+# Deterministic Scenario Engine 3.0.0
 
-**Status: PREPUBLICATION.** This document describes qualified candidate scope;
-it does not assert PyPI publication, a 3.0.0 tag, or a GitHub Release.
+**Status: RELEASED October 9, 2026.** Distribution 3.0.0 is published on
+[PyPI](https://pypi.org/project/deterministic-scenario-engine/3.0.0/) and as a
+[GitHub Release](https://github.com/imshahinul/deterministic-scenario-engine/releases/tag/3.0.0).
+
+This copy on `main` records the post-release publication state. The original
+published 3.0.0 tag retains the historical prepublication release-notes bytes.
 
 ## Added
 
@@ -38,8 +42,8 @@ promotion is supported.
 
 ## Publication verification
 
-Publication, if separately authorized, must use the exact retained reproducible
-wheel and sdist. Verify index hashes against qualification evidence, install the
-published artifacts outside the source tree on every supported Python, rerun
-DSL 1 and DSL 2 run/replay and hostile-input smokes, and inspect rendered
-metadata and links before recording release completion.
+The published release uses the exact retained reproducible wheel and sdist.
+Their production PyPI and GitHub Release SHA256 digests match the qualification
+evidence. Release verification installed the published artifacts outside the
+source tree on every supported Python, reran DSL 1 and DSL 2 run/replay and
+hostile-input smokes, and inspected rendered metadata and links.

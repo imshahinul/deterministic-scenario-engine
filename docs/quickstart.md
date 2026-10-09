@@ -1,7 +1,7 @@
 # Canonical installed-package workflows
 
-**3.0.0 candidate documentation — PREPUBLICATION.** These commands apply to a
-qualified candidate installation and do not assert that 3.0.0 is on PyPI.
+**3.0.0 release documentation.** These commands apply to the package published
+on [PyPI](https://pypi.org/project/deterministic-scenario-engine/3.0.0/).
 
 This is the canonical DSE user workflow document. Every ordinary command below
 uses the installed package and portable files created here; no source checkout,

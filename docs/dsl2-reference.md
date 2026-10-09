@@ -1,6 +1,7 @@
 # DSL 2 logical-actor reference
 
-**Status: PREPUBLICATION — DSE distribution 3.0.0 candidate.**
+**Status: RELEASED — DSE distribution 3.0.0, published October 9, 2026.** See
+the [GitHub Release](https://github.com/imshahinul/deterministic-scenario-engine/releases/tag/3.0.0).
 
 DSL 2 is selected only by integer `dsl_version: 2` and executes with Engine
 2.0.0. It preserves DSL 1 expression, deterministic value, resource, plugin,
