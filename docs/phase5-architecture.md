@@ -1078,3 +1078,66 @@ race/concurrency/independence claim, suite/matrix/batch Engine 2 orchestration,
 hosted application, contract/version change, or release action. Phase 5.8
 actor-aware diagnostics and inspection are complete and reused rather than
 reimplemented; Phase 5.9 actor-aware static trace viewing is the current scope.
+
+## 20. Phase 5.11 final public contract inventory and freeze
+
+This inventory is the Phase 5.11 release-candidate review record. It changes no
+identity, field, canonical byte, hash, compatibility classification, golden
+vector, or package-root export. “Canonical JSON” means compact UTF-8 JSON with
+sorted mapping keys and the contract's normalized semantic values; source DSL
+canonicalization remains the semantic canonicalization already specified for
+that DSL major. A SHA-256 match establishes integrity only, never replay
+attestation. Unless a row says internal, the identity is a durable public
+contract; implementation helpers and dataclass layouts outside documented
+exports remain internal.
+
+| Contract identity/version | Producer; reader | Canonicalization and integrity | Compatibility, bounds, and failure | Status; tests/goldens; documentation |
+|---|---|---|---|---|
+| DSL 1 / Engine 1.0.0 / `scenario.result/1` | Frozen DSL parser/compiler/runtime; Result/1, suite, inspection, replay and evidence readers | Semantic scenario bytes; canonical normalized Result/1 and Manifest/1; frozen SHA-256 identities | DSL 1 only; inherited parser/result limits; stable DSL/replay errors, no partial execution result | Public, unchanged; Phase 0–4 goldens and full regression; Sections 3, 11–13 and `docs/dsl-reference.md` |
+| DSL 2 / Engine 2.0.0 / `scenario.result/2` | `validate_engine2`/`execute_engine2`; strict Result/2 reader and exact replay | Canonical JSON; `result_hash` is SHA-256 of identity payload without `result_hash`; Manifest/2 and Schedule/1 linkage required | Exact same-major coordinates only; 32 MiB and inherited actor/history bounds; strict schema/hash errors or exact replay mismatch | Public module-qualified candidate; Phase 5.1–5.11 vectors and fixture F02–F06; Sections 5–13 and 15.10 |
+| `scenario.manifest/1` | Engine 1; frozen manifest/suite/evidence readers | Frozen normalized canonical bytes and scenario/resource hashes | Engine 1/DSL 1; inherited evidence bounds; unknown/mismatched coordinates fail closed | Public, unchanged; legacy goldens/Phase 4 fixtures; Sections 3, 11–13 |
+| `scenario.manifest/2` | Engine 2 Result/2 producer; `read_manifest2` | Canonical JSON; `manifest_hash` is SHA-256 of identity payload without `manifest_hash` | Engine 2/DSL 2 only; 32 MiB reader ceiling; strict schema/type/hash errors | Public module-qualified candidate; Result/2 and Phase 5.10 fixture vectors; Sections 9 and 15.10 |
+| `scenario.scheduler/1` | Pure Engine 2 scheduler; actor runtime and replay verifier | Exact canonical coordinate JSON; SHA-256 digest selects digest-modulo-ready-set | Engine 2 only; 32 actors, uint64 seed, ordinal 0–65,535; deterministic validation error | Public algorithm contract, implementation module public only where documented; literal vectors; Section 7.1 |
+| `scenario.schedule/1` | Engine 2 actor runtime; strict reader, Result/2 replay and trace viewer | Canonical JSON; `schedule_hash` is SHA-256 of payload without `schedule_hash` | Engine 2 exact use; 8 MiB and 65,536 records; schema/bound/hash/replay mismatch errors | Public module-qualified candidate; Phase 5.4/5.6/5.10 goldens; Sections 8 and 15.10 |
+| `scenario.semantic-address/1` | Diagnostics, DSL and analysis producers; all durable-address consumers | NFC identifiers, canonical UTF-8 percent encoding, canonical byte equality/order | Cross-major durable reference; depth 32 and 2,048 bytes; reject noncanonical, never repair | Public, unchanged; Phase 4.12 and actor-address vectors; Phase 4 Section 6 and Section 13.2 here |
+| `scenario.error/1` | CLI diagnostic adapter; CLI/API consumers | Canonical compact UTF-8 JSON plus LF, deterministic field/detail ordering | Cross-major; 1 MiB envelope, depth 32, 1,000 details and narrower field bounds; stable code/exit family and redaction | Public, unchanged; Phase 4.5/4.12/5.11 tests; Phase 4 diagnostic contract and Section 13.2 here |
+| `scenario.compatibility-fixtures/1` | Installed Phase 4 pack; strict verifier/exporter | Canonical manifest plus declared lowercase SHA-256 for exact resource bytes | Historical finite corpus only; bounded local regular files; integrity/publication errors | Public, immutable; Phase 4.11 digest and packaged-consumer tests; Section 15.10 |
+| `scenario.compatibility-fixtures/2` | Installed Phase 5.10 pack; strict reader/verifier/exporter | Canonical manifest; exact declared resource SHA-256; deterministic ID/path order | Engine 1/2 matrix evidence; 1 MiB manifest, native 8/32 MiB resource limits; fail closed and rollback | Public candidate; F01–F30 and fixed hashes; Section 15.10 |
+| `scenario.definition-diff/1` | DSL 1 structural diff; diff reader/renderers | Canonical typed records ordered by semantic address | DSL 1 only; preserved graph/report bounds; deterministic unsupported/schema errors | Public, unchanged; Phase 4.7/4.12 goldens; Phase 4 diff contract |
+| `scenario.definition-diff/2` | DSL 2 actor-aware diff; diff consumers | Canonical actor-address ordered records | DSL 2 only, no cross-major pairing; inherited diff bounds; fail closed | Public candidate; Phase 5.7 tests; Section 18 |
+| `scenario.impact/1` | DSL 1 impact analyzer; impact renderers | Canonical conservative findings and graph coordinates | DSL 1 only; inherited node/edge/depth/report bounds; unknown stays explicit | Public, unchanged; Phase 4.8/4.12 vectors; Phase 4 impact contract |
+| `scenario.impact/2` | DSL 2 actor-aware analyzer; impact consumers | Canonical actor-address ordered conservative findings | DSL 2 only; inherited analysis bounds; unsupported knowledge is never “unaffected” | Public candidate; Phase 5.7 tests; Section 18 |
+| `inspection.document/1` | Frozen inspection entry points; canonical inspection reader/serializer | Canonical normalized and recursively redacted JSON | Supported v1 artifacts; inspection bounds; malformed/unsupported fails closed | Public, unchanged; Phase 2/4 goldens; `docs/api.md` and Phase 4 |
+| `inspection.document/2` | Actor-aware inspection; canonical serializer | Canonical actor/global sections, recursive redaction | Hash-consistent v2 evidence; inherited inspection bounds; replay status never invented | Public candidate; Phase 5.7 tests; Section 18 |
+| `inspection.explanation/1` | Frozen explanation entry points; serializer | Canonical ordered explanation records with redaction | Supported v1 artifacts; inspection bounds; deterministic unavailable values | Public, unchanged; Phase 2/4 tests; `docs/api.md` and Phase 4 |
+| `inspection.explanation/2` | Actor-aware explanation; serializer | Canonical global-history order and optional verified selection context | Result/2 plus optional Schedule/1; inherited bounds; mismatch/unsupported fails closed | Public candidate; Phase 5.7 tests; Section 18 |
+| `scenario.trace-view/1` | Static renderer and CLI; browser as inert offline document reader | Deterministic escaped self-contained HTML with deny-by-default CSP; source SHA-256 displayed but not replay proof | Result/1, Suite Run/1, and Result/2 with optional matching Schedule/1; 16 MiB input, 100,000 events, depth 64, 1 MiB value, 128 MiB output | Public, compatible actor-aware revision; Phase 4.9/5.9 vectors; Section 19 |
+| `suite.run/1` | Engine 1 CLI run/replay; strict suite reader | Frozen canonical suite bytes and child manifest/result coordinates | Engine 1 supported replay only; frozen suite/read bounds; compatibility error on incomplete data | Public, unchanged; Phase 2/4 replay goldens; Sections 11–12 and CLI docs |
+| `suite.run/2` | `SuiteRun2` schema producer; `read_suite_run2` | Canonical JSON; `suite_hash` is SHA-256 of identity payload; sorted immutable members | Result/2, Manifest/2 and Schedule/1 references only; 10,000 members and 32 MiB; schema/reader validation only | Public candidate schema/reader, execution orchestration unsupported; Phase 5.5/5.10 vectors; Sections 10 and 15.10 |
+
+The reviewed compatibility classifications remain exactly `SUPPORTED_EXACT`,
+`SUPPORTED_LEGACY_OPERATION`, `UNSUPPORTED_CROSS_MAJOR`, `UNKNOWN_CONTRACT`,
+`UNKNOWN_VERSION`, and `INCOMPLETE_COORDINATES` as defined in Section 15.10.
+All Section 13 ceilings are inclusive and independently enforced. When static
+DSL 2 limits overlap, actor count is checked before per-actor declarations and
+per-actor declaration count before aggregate declaration count. Evidence byte
+bounds precede decoding; after decoding, nesting/schema/type/count checks precede
+canonical-byte and digest acceptance; replay validates complete top-level
+coordinates before transition execution and then validates each selection before
+its transition. Rejection produces no truncated evidence, repaired input,
+partial result, partial replay success, destination overwrite, or leaked
+transition mutation.
+
+The Phase 5.11 measurements are characterization, not an absolute speed or
+memory SLA: no approved historical Engine 2 baseline or normative performance
+threshold exists. Comparable runs must record interpreter/platform metadata,
+fixed coordinates, workload dimensions, output sizes, repeated wall time and,
+where the host supports it, peak process memory. Setup/import cost is reported
+separately from in-process execution. Optimizations remain unauthorized unless
+they preserve every byte and compatibility vector above.
+
+```text
+PHASE5_11_CONTRACT_INVENTORY_FROZEN=YES
+ENGINE2_RELEASE_STATUS=UNRELEASED_CANDIDATE
+PHASE5_12_IMPLEMENTATION_OR_PUBLICATION_AUTHORIZED=NO
+```
