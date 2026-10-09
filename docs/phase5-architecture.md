@@ -750,6 +750,153 @@ is test-only internal data and is not a `scenario.schedule/1`, `scenario.result/
 | **5.11 — Performance, security, and contract freeze** | Enforce ceilings, adversarial replay/evidence tests, final public contracts | Resource ceilings, deterministic limit failures, tamper/path/secret tests, legacy goldens, docs and fresh-install targeted gates all pass |
 | **5.12 — Independent acceptance and DSE 3.0.0 publication** | Independent candidate verification, then separately authorized tag/package/release | Candidate SHA/artifact hashes, clean source, supported Python matrix, replay/security acceptance, explicit publication authorization, immutable release verification |
 
+### 15.10 Phase 5.10 normative public and fixture contract
+
+This section is the documentation-first Phase 5.10 contract freeze. It is
+additive to Sections 11–13 and does not authorize Phase 5.11 work. The reviewed
+Phase 5.6 module surface is adopted rather than wrapped or promoted at the
+package root. The exact package-root `scenario_engine.__all__` therefore remains
+unchanged: existing consumers keep Engine 1 defaults, result types, exceptions,
+and import behavior. There is no demonstrated consumer need that justifies a
+second package-root execution vocabulary.
+
+The following module-qualified Python names are public. The call signatures are
+the existing runtime signatures; `Any` at the boundary denotes the validated
+runtime object checked by the operation, not permission to bypass validation:
+
+```python
+scenario_engine.engine2.validate_engine2(yaml_text: str) -> Any
+scenario_engine.engine2.execute_engine2(
+    scenario: Any, root_seed: str | int, schedule_seed: int, *,
+    run_index: int = 0, inputs: Mapping[str, Any] | None = None,
+    plugins: Any = None,
+) -> tuple[Engine2Result, ScheduleArtifact]
+scenario_engine.engine2.replay_engine2(
+    result: Engine2Result | bytes | str,
+    schedule: ScheduleArtifact | bytes | str,
+    scenario: Any, *, inputs: Mapping[str, Any] | None = None,
+    plugins: Any = None,
+) -> Engine2Result
+scenario_engine.compatibility.classify_engine_contract(
+    *, dsl_version: int | None, engine_version: str | None,
+    result_contract: str | None, operation: str,
+) -> CompatibilityDecision
+```
+
+The immutable evidence access surface is `Engine2Manifest`, `Engine2Result`,
+`ScheduleReference`, `read_manifest2`, `read_result2`,
+`canonical_manifest2_bytes`, `canonical_manifest2_identity_bytes`,
+`canonical_result2_bytes`, and `canonical_result2_identity_bytes` from
+`scenario_engine.engine2`, plus `ScheduleArtifact`, `read_schedule`,
+`canonical_schedule_bytes`, and `canonical_schedule_identity_bytes` from
+`scenario_engine.schedule`. `read_suite_run2` validates the bounded Run/2 schema
+only; it does not execute or resolve members. `validate_engine2` rejects a
+non-DSL-2 definition with `Engine2EvidenceError`; `execute_engine2` rejects an
+unvalidated/non-`CompiledScenarioV2` object with `TypeError`; strict evidence
+readers reject malformed, noncanonical, duplicate-key, missing-field,
+unknown-field, wrong-type, over-limit, hash-invalid, or unsupported evidence
+with their existing `Engine2EvidenceError`/`Engine2EvidenceBoundError` or
+`ScheduleError`/`ScheduleBoundError` families. Replay coordinate or observation
+mismatches use `Engine2ReplayMismatch` or `ScheduleReplayMismatch`. No operation
+fills, migrates, or guesses missing evidence.
+
+The public classifier is pure and returns immutable
+`scenario.compatibility/2` `CompatibilityDecision` values. Its stable
+classifications are `SUPPORTED_EXACT`, `SUPPORTED_LEGACY_OPERATION`,
+`UNSUPPORTED_CROSS_MAJOR`, `UNKNOWN_CONTRACT`, `UNKNOWN_VERSION`, and
+`INCOMPLETE_COORDINATES`; its operations are exactly `execute`, `replay`, and
+`inspect`. An unknown operation is `UNKNOWN_CONTRACT`. A missing DSL, engine, or
+result-contract coordinate is `INCOMPLETE_COORDINATES`. Unknown result contracts
+are `UNKNOWN_CONTRACT`; after a known result contract is established, unknown
+DSL or engine versions are `UNKNOWN_VERSION`. Exact matching Engine 1/Result 1
+and Engine 2/Result 2 tuples are `SUPPORTED_EXACT`. Engine 2 inspection of
+Result/1 is the sole `SUPPORTED_LEGACY_OPERATION`; it does not imply replay.
+Every other known mixed-major tuple is `UNSUPPORTED_CROSS_MAJOR`.
+
+The top-level commands remain `scenario validate`, `scenario run`, and
+`scenario replay`; no new top-level execution command is introduced. DSL 1
+syntax and defaults are unchanged. DSL 2 routes only from its declared integer
+version and adds these `run` options: existing `--seed` remains the generation
+root seed; `--schedule-seed INTEGER` is a separate required unsigned 64-bit
+integer in `[0, 18446744073709551615]`; `--schedule-out PATH` is a required
+absent absolute local Schedule/1 destination; and optional `--result-out PATH`
+writes the same Result/2 bytes emitted on stdout. `--replay-out` remains the
+Engine 1 Suite Run/1 destination and is rejected on DSL 2. Engine 2 `replay`
+uses the existing `source` Result/2 argument, required `--scenario`, optional
+`--inputs`, and required `--schedule PATH`. A missing schedule seed is CLI usage
+exit 2 (`SCHEDULE_SEED_REQUIRED`); a missing replay schedule is compatibility
+exit 5 (`SCHEDULE_EVIDENCE_REQUIRED`). Success is exit 0 and writes the
+canonical result to stdout only; diagnostics go to stderr. Global `--json`
+retains canonical JSON success output and `scenario.error/1` errors. Existing
+exit families 0–8, stream placement, help paths, and Engine 1 behavior remain
+unchanged. There is no seed derivation, DSL promotion/fallback, or evidence
+migration.
+
+The historical `scenario.compatibility-fixtures/1` corpus and every historical
+byte/hash remain immutable. Phase 5.10 adds the separately rooted installed
+resource `data/compatibility/phase5_10` with manifest identity
+`scenario.compatibility-fixtures/2`; it never regenerates or shadows
+`phase4_11`. Its canonical compact UTF-8 JSON manifest has exactly
+`schema_version`, `fixture_set`, `operation_order`, `fixtures`, and
+`support_files`. `fixture_set` is `phase5_10`; `operation_order` is
+`["execute","replay","inspect","read"]`; fixtures are in unique UTF-8
+fixture-ID order; support files are in unique path order. Each fixture has
+exactly `id`, `artifact_contract`, `engine_version`, `dsl_version`, `operation`,
+`expected_classification`, `path`, `sha256`, and `provenance`. Provenance has
+exactly `kind`, `source`, and `coordinates`; coordinates identify all immutable
+source/evidence contracts relevant to the case. A support file has exactly
+`path`, `sha256`, and `role`. Paths are unique normalized relative POSIX paths,
+cannot escape the pack, and identify regular packaged files. SHA-256 is lowercase
+hex over the file's exact bytes. The manifest does not hash itself.
+
+The immutable IDs are `F01-legacy-dsl1-engine1-result1-success` through
+`F30-unsupported-mixed-contract-tuple`, with the meanings listed in the Phase
+5.10 checkpoint authorization. Fixtures may deliberately share one declared
+file and digest when their classification differs by operation or supplied
+coordinate tuple; a negative fixture never contains fabricated successful
+output. F01 and F28 refer by digest/provenance to the unchanged Phase 4 corpus.
+F02–F06 use native DSL 2, Manifest/2, Result/2, Schedule/1, exact replay, and
+Run/2-reader evidence. F07–F12 cover cross-major and unknown contracts. F13–F27
+cover unknown engines, incomplete/missing/mismatched coordinates, tampering,
+strict JSON/schema/type/address rejection, and F29–F30 cover deterministic export
+and mixed-contract failure. Every case has a finite expected classifier or
+stable rejection classification.
+
+`scenario_engine.compatibility_fixtures` exposes a strict bounded Phase 5.10
+manifest reader, integrity verifier, and exporter. Reading accepts only the
+installed fixed root, checks duplicate keys, exact fields and types, canonical
+manifest bytes, ID/path ordering, path safety, the finite inventory, and declared
+SHA-256 values. Integrity verification reads each declared regular resource at
+most once under its applicable 32 MiB Result/2 or 8 MiB Schedule/1 ceiling and
+rejects missing, replaced, oversized, or digest-mismatched resources. Export
+copies verified bytes in manifest order to one absent absolute local directory,
+with rollback on failure. The existing fixture command gains only an explicit
+pack selector; its omitted/default selection and historical export bytes stay
+unchanged. No source-tree fallback, ambient discovery, symlink following,
+network retrieval, unsafe deserialization, or silent replacement is allowed.
+
+The complete operation matrix is: DSL 1/Engine 1 is `SUPPORTED_EXACT`; DSL
+1/Engine 2 and DSL 2/Engine 1 are `UNSUPPORTED_CROSS_MAJOR`; DSL 2/Engine 2 is
+`SUPPORTED_EXACT` only with complete exact coordinates; Engine 1 consumption of
+Result/2 and Engine 2 replay of Result/1 are `UNSUPPORTED_CROSS_MAJOR`; Engine 2
+inspection of Result/1 alone is `SUPPORTED_LEGACY_OPERATION`; unknown newer
+contracts or unknown operations are `UNKNOWN_CONTRACT`; unknown DSL/engine
+versions on known contracts are `UNKNOWN_VERSION`; incomplete coordinates are
+`INCOMPLETE_COORDINATES`; and mixed manifest/result/schedule tuples fail closed.
+Inspection is never exact replay.
+
+All Section 13 limits remain mandatory, including 32 actors, 256 declared nodes
+per actor, 4,096 total declared nodes, 65,536 scheduler selections, 4,096 routing
+operations per selection, 8 MiB Schedule/1 bytes, 32 MiB Result/2 bytes, 65,536
+verified replay selections, semantic-address depth 32 and 2,048 canonical UTF-8
+bytes. Fixture processing adds no larger read allowance. Strict JSON/YAML,
+duplicate-key rejection, bounded redacted diagnostics, no-follow local-file
+boundaries, absent destinations, atomic single-file publication, documented
+multi-output rollback limits, deterministic errors, and finite processing remain
+in force. Any incomplete or unknown evidence, undeclared file, unsupported
+version, noncanonical bytes, mixed tuple, or unverifiable digest is rejected;
+parseability alone is never compatibility evidence.
+
 The tentative publication target for DSE `3.0.0` is **December 15, 2026**. It
 is a planning target, not an authorization or guarantee. Publication cannot occur
 before 5.12 gates and a separate explicit release decision.
