@@ -861,3 +861,73 @@ inspection bounds, analysis graph bounds, evidence byte/depth/count bounds, and
 redaction rules remain authoritative. Phase 5.7 adds no trace-view rendering,
 schedule exploration, race detection, suite/matrix/batch execution, or version
 metadata change.
+
+## 19. Phase 5.9 actor-aware static trace-view contract amendment
+
+The owner-authorized Phase 5.9 checkpoint keeps `scenario.trace-view/1` as the
+single renderer contract. Actor-aware rendering is a compatible input-support
+revision of that contract, not `scenario.trace-view/2`, because the output is
+still the same deterministic, self-contained, read-only HTML representation of
+recorded evidence. The existing Python `render_trace_view(result,
+schedule=None)` entry point accepts a strictly read and hash-consistent
+`scenario.result/2`; the existing CLI becomes `scenario trace-view RESULT
+--out VIEW.html [--schedule SCHEDULE]`. Result/1 and `suite.run/1` invocation,
+bytes, sections, metadata, limits, and behavior remain unchanged. Suite Run/2
+contains references rather than the child evidence needed for actor lanes and
+is unsupported by this checkpoint.
+
+For Result/2, Schedule/1 is optional. When supplied it is strictly and
+canonically read and must match the result's schedule reference plus every
+shared manifest coordinate: scenario and schedule hashes, declared actors,
+root and schedule seeds, input-resource hashes, run index, scheduler contract,
+DSL and engine versions, reference clock, generator versions, terminal
+classification, terminal failure, and the recorded commit count. A committed
+selection's `committed_history_length` is the preselection length and therefore
+identifies the global history index committed by that selection; these indices
+must be contiguous and unique. A failed selection is final, retains its own
+selection ordinal and preselection coordinates, and has no committed-history
+entry. Any malformed, noncanonical, mismatched, incomplete, or unsupported
+supplied schedule fails closed. With no schedule, committed Result/2 history is
+rendered and selection context is explicitly unavailable; ready sets,
+selection ordinals, and scheduler decisions are never inferred.
+
+Actor lanes are ordered by unsigned lexicographic UTF-8 bytes of canonical
+`scenario.semantic-address/1` actor identities. Each lane is only a stable
+filter of the one authoritative global committed history, preserving its
+global indices; it is not a separate history, operating-system thread, or claim
+of simultaneous execution. A lane displays its actor identity, actor-scoped
+step addresses and committed transitions, any recorded failed attempt, and its
+recorded `next_step`/`terminal` control summary. The global timeline remains in
+Result/2 history order and displays global history index, actor, step address,
+logical clock, transition, deterministic state patch and before/after
+fingerprints, artifacts, faults, and the related selection ordinal when
+Schedule/1 supplies it. Terminal success or failure, including the recorded
+failure actor, code, and selection ordinal, is displayed without synthesis.
+
+The integrity section distinguishes: structurally accepted canonical evidence;
+canonical result, manifest, and, when supplied, schedule hash consistency; and
+exact execution replay, which is always `not performed` by this static viewer.
+Hash/linkage verification is not replay attestation, and no evidence-provided
+status string is accepted as one. Unsupported or invalid evidence produces no
+viewer file.
+
+All Phase 4 viewer security and filesystem rules remain authoritative: one
+atomically created absent local file, escaped evidence as inert data, embedded
+CSS only, no script or active URL, no network/server/telemetry/execution, and a
+deny-by-default CSP. Recursive secret-key redaction is applied before both
+display and embedded bounded evidence. The Phase 4 implementation ceilings
+remain exactly 16 MiB input, 100,000 displayed timeline records, depth 64,
+1 MiB per displayed value with explicit deterministic truncation, and 128 MiB
+output; Engine 2's stricter 32 actors, 65,536 schedule selections, 8 MiB
+canonical schedule, and 32 MiB canonical result ceilings are also enforced by
+their readers. Because the viewer's 16 MiB input ceiling is lower, larger
+otherwise-valid Result/2 evidence is rejected before decoding rather than
+silently truncated. Rendering loops are bounded by validated actor, history,
+artifact, and schedule counts, and authoritative evidence is never silently
+dropped or reordered.
+
+Phase 5.9 adds no scenario execution, exact replay, schedule exploration,
+race/concurrency/independence claim, suite/matrix/batch Engine 2 orchestration,
+hosted application, contract/version change, or release action. Phase 5.8
+actor-aware diagnostics and inspection are complete and reused rather than
+reimplemented; Phase 5.9 actor-aware static trace viewing is the current scope.
