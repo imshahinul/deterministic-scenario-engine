@@ -36,6 +36,10 @@ from scenario_engine.dsl import (
     compile_document, parse_yaml, replay_scenario, run_scenario,
 )
 from scenario_engine.errors import ScenarioEngineError
+from scenario_engine.engine2 import (
+    Engine2EvidenceBoundError, Engine2EvidenceError, Engine2ReplayMismatch,
+    canonical_result2_bytes, execute_engine2, replay_engine2,
+)
 from scenario_engine.evidence import (
     BUNDLE_INDEX_FILENAME, ArtifactDescriptor, EvidenceBoundError, EvidenceContractError,
     EvidenceDestinationError, EvidenceExportBoundError, EvidenceFilesystemError,
@@ -55,6 +59,10 @@ from scenario_engine.manifest import (
     ReplayCompatibilityError, ReplayCompatibilityReason, ReproducibilityManifest,
 )
 from scenario_engine.resources import ResourceResolutionError
+from scenario_engine.schedule import (
+    MAX_SCHEDULE_SEED, ScheduleBoundError, ScheduleError, ScheduleReplayMismatch,
+    canonical_schedule_bytes,
+)
 from scenario_engine.scaffolding import (
     DEFAULT_SCAFFOLD_PROVIDER, ScaffoldError, ScaffoldRequest, scaffold_scenario,
 )
@@ -110,10 +118,15 @@ class PathReason(str, Enum):
 class _CLIError(Exception):
     def __init__(
         self, message: str, code: CLIExitCode, *, path_reason: PathReason | None = None,
+        diagnostic_code: str = "CLI_ERROR", category: str = "CLI_USAGE",
+        remediation: str = "correct the command invocation",
     ) -> None:
         super().__init__(message)
         self.code = code
         self.path_reason = path_reason
+        self.diagnostic_code = diagnostic_code
+        self.category = category
+        self.remediation = remediation
 
 
 class _Parser(argparse.ArgumentParser):
@@ -170,9 +183,10 @@ def _parser() -> argparse.ArgumentParser:
     run = commands.add_parser(
         "run", help="execute a scenario and optionally write a suite.run/1 replay artifact",
         description=(
-            "Execute a validated scenario and emit its normal scenario.result/1 result. "
-            "--replay-out separately writes a supported suite.run/1 replay artifact; a normal "
-            "result is not automatically replayable."
+            "Execute DSL 1 with Engine 1 and emit its normal scenario.result/1 result; "
+            "--replay-out separately writes a supported suite.run/1 artifact because a normal "
+            "Result/1 is not automatically replayable. Execute DSL 2 with deterministic logical "
+            "actors; DSL 2 requires --schedule-seed and --schedule-out and emits scenario.result/2."
         ),
     )
     _source(run)
@@ -181,11 +195,24 @@ def _parser() -> argparse.ArgumentParser:
         "--replay-out", metavar="PATH",
         help="write a supported suite.run/1 replay artifact to an absent local path",
     )
+    run.add_argument(
+        "--schedule-seed", metavar="INTEGER",
+        help="explicit independent unsigned 64-bit DSL 2 schedule seed",
+    )
+    run.add_argument(
+        "--schedule-out", metavar="PATH",
+        help="write DSL 2 scenario.schedule/1 to an absent absolute local path",
+    )
+    run.add_argument(
+        "--result-out", metavar="PATH",
+        help="also write DSL 2 scenario.result/2 to an absent absolute local path",
+    )
 
     replay = commands.add_parser(
-        "replay", help="replay a supported suite.run/1 artifact with fail-closed compatibility",
+        "replay", help="exactly replay supported Engine 1 or Engine 2 evidence",
         description=(
-            "Replay a supported suite.run/1 recorded manifest. Incompatibility exits 5 and "
+            "Replay a supported suite.run/1 recorded manifest or scenario.result/2 plus the separately "
+            "supplied --schedule scenario.schedule/1. Incompatibility exits 5 and "
             "reports a stable replay reason code on stderr. The original external inputs may "
             "be required: --inputs must match the recorded input fingerprint where applicable. "
             "Missing required replay data fails closed with exit 5."
@@ -196,6 +223,10 @@ def _parser() -> argparse.ArgumentParser:
     replay.add_argument(
         "--inputs",
         help="bounded JSON object containing original external inputs required by the artifact",
+    )
+    replay.add_argument(
+        "--schedule", metavar="PATH",
+        help="required scenario.schedule/1 local path when source is scenario.result/2",
     )
 
     trace_view = commands.add_parser(
@@ -472,6 +503,26 @@ def _seed(value: str) -> str | int:
     return parsed
 
 
+def _schedule_seed(value: str | None) -> int:
+    if value is None:
+        raise _CLIError(
+            "DSL 2 execution requires --schedule-seed", CLIExitCode.USAGE,
+            diagnostic_code="SCHEDULE_SEED_REQUIRED", category="CLI_USAGE",
+            remediation="SUPPLY_EXPLICIT_SCHEDULE_SEED",
+        )
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, bool) or not isinstance(parsed, int) or not 0 <= parsed <= MAX_SCHEDULE_SEED:
+        raise _CLIError(
+            "--schedule-seed must be an integer from 0 through 18446744073709551615",
+            CLIExitCode.USAGE, diagnostic_code="SCHEDULE_SEED_INVALID", category="CLI_USAGE",
+            remediation="SUPPLY_VALID_SCHEDULE_SEED",
+        )
+    return parsed
+
+
 def _result_output(value: Any) -> bytes:
     return value.to_json_bytes()
 
@@ -495,6 +546,36 @@ def _scaffold(args: argparse.Namespace) -> tuple[bytes, bytes]:
 def _run(args: argparse.Namespace) -> tuple[bytes, bytes]:
     target, composed = _load_target(args.source, args.root)
     inputs = _json_argument(args.inputs, dict, None)
+    if isinstance(target, CompiledScenarioV2):
+        if composed:
+            raise _CLIError("DSL 2 composed execution is unsupported", CLIExitCode.REPLAY_COMPATIBILITY)
+        schedule_seed = _schedule_seed(args.schedule_seed)
+        if args.replay_out is not None:
+            raise _CLIError(
+                "DSL 2 uses --schedule-out rather than --replay-out", CLIExitCode.USAGE,
+                diagnostic_code="ENGINE2_REPLAY_OUTPUT_INVALID", remediation="SUPPLY_SCHEDULE_OUT",
+            )
+        if args.schedule_out is None:
+            raise _CLIError(
+                "DSL 2 execution requires --schedule-out", CLIExitCode.USAGE,
+                diagnostic_code="SCHEDULE_OUTPUT_REQUIRED", remediation="SUPPLY_SCHEDULE_OUT",
+            )
+        result, schedule = execute_engine2(
+            target, _seed(args.seed), schedule_seed,
+            run_index=args.run_index, inputs=inputs,
+        )
+        result_data = canonical_result2_bytes(result)
+        schedule_data = canonical_schedule_bytes(schedule)
+        outputs = [(args.schedule_out, schedule_data, "schedule output")]
+        if args.result_out is not None:
+            outputs.append((args.result_out, result_data, "result output"))
+        _publish_engine2_outputs(outputs)
+        return result_data, result_data
+    if args.schedule_seed is not None or args.schedule_out is not None or args.result_out is not None:
+        raise _CLIError(
+            "Engine 2 output options require a DSL 2 scenario", CLIExitCode.USAGE,
+            diagnostic_code="ENGINE2_OPTIONS_REQUIRE_DSL2", remediation="REMOVE_ENGINE2_OPTIONS",
+        )
     if composed:
         if args.replay_out is not None:
             raise UnsupportedReplayContractError("composed-cli-run", ())
@@ -509,6 +590,51 @@ def _run(args: argparse.Namespace) -> tuple[bytes, bytes]:
         _write_replay_artifact(args.replay_out, _replay_envelope(result))
     data = _result_output(result)
     return data, data
+
+
+def _publish_engine2_outputs(outputs: Sequence[tuple[str, bytes, str]]) -> None:
+    """Publish fully constructed evidence to distinct absent paths, rolling back this operation."""
+    targets: list[tuple[Path, bytes]] = []
+    for raw, data, label in outputs:
+        path = _require_absolute_local(raw, label)
+        if path in (item[0] for item in targets):
+            raise _CLIError(
+                "Engine 2 output destinations must be distinct", CLIExitCode.IO,
+                path_reason=PathReason.INVALID_DESTINATION,
+            )
+        if not path.parent.is_dir():
+            raise _CLIError(
+                f"{label} parent directory does not exist", CLIExitCode.IO,
+                path_reason=PathReason.DESTINATION_PARENT_MISSING,
+            )
+        if path.exists() or path.is_symlink():
+            raise _CLIError(
+                f"{label} path must not already exist", CLIExitCode.IO,
+                path_reason=PathReason.DESTINATION_ALREADY_EXISTS,
+            )
+        targets.append((path, data))
+    published: list[Path] = []
+    try:
+        for path, data in targets:
+            publish_suite_bytes(data, path)
+            published.append(path)
+    except FileExistsError:
+        for path in reversed(published):
+            path.unlink(missing_ok=True)
+        raise _CLIError(
+            "Engine 2 output path must not already exist", CLIExitCode.IO,
+            path_reason=PathReason.DESTINATION_ALREADY_EXISTS,
+        ) from None
+    except OSError:
+        for path in reversed(published):
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise _CLIError(
+            "unable to publish complete Engine 2 evidence", CLIExitCode.IO,
+            path_reason=PathReason.DESTINATION_NOT_WRITABLE,
+        ) from None
 
 
 def _replay_envelope(result: Any) -> RunManifestEnvelope:
@@ -569,6 +695,29 @@ def _replay(args: argparse.Namespace) -> tuple[bytes, bytes]:
     artifact = _read(args.source)
     scenario = _text(_read(args.scenario), "scenario")
     inputs = _json_argument(args.inputs, dict, None)
+    if _json_contract(artifact) == "scenario.result/2":
+        if args.schedule is None:
+            raise _CLIError(
+                "scenario.result/2 replay requires --schedule", CLIExitCode.REPLAY_COMPATIBILITY,
+                diagnostic_code="SCHEDULE_EVIDENCE_REQUIRED", category="REPLAY_COMPATIBILITY",
+                remediation="SUPPLY_EXACT_SCHEDULE_EVIDENCE",
+            )
+        compiled = compile_document(parse_yaml(scenario))
+        if not isinstance(compiled, CompiledScenarioV2):
+            raise _CLIError(
+                "scenario.result/2 replay requires the exact DSL 2 scenario",
+                CLIExitCode.REPLAY_COMPATIBILITY, diagnostic_code="SCENARIO_MISMATCH",
+                category="REPLAY_COMPATIBILITY", remediation="SUPPLY_EXACT_DSL2_SCENARIO",
+            )
+        schedule = _read(args.schedule)
+        evidence = replay_engine2(artifact, schedule, compiled, inputs=inputs)
+        data = canonical_result2_bytes(evidence)
+        return data, data
+    if args.schedule is not None:
+        raise _CLIError(
+            "--schedule is only valid for scenario.result/2 replay", CLIExitCode.USAGE,
+            diagnostic_code="ENGINE2_OPTIONS_REQUIRE_RESULT2", remediation="REMOVE_SCHEDULE_OPTION",
+        )
     recognized_envelope = _require_supported_replay_schema(artifact)
     try:
         suite_value = parse_suite_bytes(artifact)
@@ -621,6 +770,16 @@ def _replay(args: argparse.Namespace) -> tuple[bytes, bytes]:
         ) from None
     data = result.to_json_bytes()
     return data, data
+
+
+def _json_contract(data: bytes) -> str | None:
+    try:
+        value = json.loads(
+            data.decode("utf-8"), object_pairs_hook=_unique_object, parse_constant=_reject_constant,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return None
+    return value.get("contract") if isinstance(value, Mapping) and isinstance(value.get("contract"), str) else None
 
 
 def _trace_view(args: argparse.Namespace) -> tuple[bytes, bytes]:
@@ -793,6 +952,12 @@ def _hash(args: argparse.Namespace) -> tuple[bytes, bytes]:
 
 def _artifact(source: str, kind: str, stdin_used: list[bool] | None = None) -> Any:
     data = _read(source, stdin_used=stdin_used)
+    if _json_contract(data) in ("scenario.result/2", "scenario.manifest/2", "suite.run/2"):
+        raise _CLIError(
+            "Engine 2 inspection, explanation, diff, and suite operations are not supported by this checkpoint",
+            CLIExitCode.VALIDATION, diagnostic_code="ENGINE2_OPERATION_UNSUPPORTED",
+            category="COMMAND", remediation="USE_ENGINE2_RUN_OR_EXACT_REPLAY",
+        )
     if kind == "result":
         return read_v1_result_bytes(data)
     if kind == "manifest":
@@ -1161,6 +1326,12 @@ def _mapped(error: Exception) -> CLIExitCode:
         return CLIExitCode.SECURITY_OR_BOUND if error.code in {"TRACE_INPUT_TOO_LARGE", "TRACE_OUTPUT_TOO_LARGE"} else CLIExitCode.VALIDATION
     if isinstance(error, (UnsupportedReplayContractError, ReplayCompatibilityError)):
         return CLIExitCode.REPLAY_COMPATIBILITY
+    if isinstance(error, (Engine2ReplayMismatch, ScheduleReplayMismatch)):
+        return CLIExitCode.REPLAY_COMPATIBILITY
+    if isinstance(error, (Engine2EvidenceBoundError, ScheduleBoundError)):
+        return CLIExitCode.SECURITY_OR_BOUND
+    if isinstance(error, (Engine2EvidenceError, ScheduleError)):
+        return CLIExitCode.VALIDATION
     if isinstance(error, (CompositionBoundError, ArtifactBoundError, InspectionBoundError, DiffBoundError)):
         return CLIExitCode.SECURITY_OR_BOUND
     if isinstance(error, (EvidenceBoundError, EvidenceExportBoundError, EvidenceValidationBoundError,
@@ -1216,8 +1387,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 _render_path_human(diagnostic)
         else:
             diagnostic = HumanDiagnostic(
-                "CLI_ERROR", "CLI_USAGE", bounded_text(str(error)),
-                remediation="correct the command invocation",
+                error.diagnostic_code, error.category, bounded_text(str(error)),
+                remediation=error.remediation,
             )
             if json_mode:
                 _emit_machine(diagnostic, error.code)
@@ -1259,6 +1430,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             diagnostic = HumanDiagnostic(
                 error.code, error.category, bounded_text(str(error)),
                 remediation="SUPPLY_SUPPORTED_BOUNDED_LOCAL_ARTIFACT",
+            )
+            if json_mode:
+                _emit_machine(diagnostic, code)
+            else:
+                sys.stderr.write(render_human_diagnostic(diagnostic))
+            return int(code)
+        if isinstance(error, (Engine2EvidenceError, ScheduleError)):
+            diagnostic = HumanDiagnostic(
+                error.code, "REPLAY_COMPATIBILITY" if code is CLIExitCode.REPLAY_COMPATIBILITY else
+                "ENGINE2_EVIDENCE", "Engine 2 evidence was rejected",
+                remediation="SUPPLY_COMPLETE_UNMODIFIED_ENGINE2_EVIDENCE",
+                details={"field": bounded_text(error.field)},
             )
             if json_mode:
                 _emit_machine(diagnostic, code)

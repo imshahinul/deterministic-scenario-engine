@@ -117,14 +117,14 @@ def invoke(*args: str) -> subprocess.CompletedProcess[bytes]:
     )
 
 
-def test_cli_validate_pass_run_unsupported_and_error_envelope(tmp_path: Path) -> None:
+def test_cli_validate_pass_and_run_requires_engine2_coordinates(tmp_path: Path) -> None:
     path = tmp_path / "dsl2.yaml"; path.write_text(source(actor("one")), encoding="utf-8")
     valid = invoke("--json", "validate", str(path))
     assert valid.returncode == 0 and json.loads(valid.stdout)["valid"] is True
     run = invoke("--json", "run", str(path), "--seed", "seed")
     envelope = json.loads(run.stderr)
-    assert run.returncode == 4 and envelope["schema"] == "scenario.error/1"
-    assert envelope["code"] == "DSL2_EXECUTION_UNSUPPORTED"
+    assert run.returncode == 2 and envelope["schema"] == "scenario.error/1"
+    assert envelope["code"] == "SCHEDULE_SEED_REQUIRED"
 
 
 def test_cli_input_bound_remains_fail_closed(tmp_path: Path) -> None:

@@ -1,4 +1,4 @@
-"""Internal Engine 2 manifest, result, suite, and exact replay evidence."""
+"""Engine 2 manifest, result, execution, and exact replay evidence."""
 
 from __future__ import annotations
 
@@ -569,3 +569,47 @@ def exact_replay_result2_internal(
         if expected != received:
             raise Engine2ReplayMismatch(field_name, "replayed observation does not match result")
     return replay
+
+
+def validate_engine2(yaml_text: str) -> Any:
+    """Parse and compile one DSL 2 definition, rejecting every other DSL version."""
+    from .dsl import CompiledScenarioV2, compile_document, parse_yaml
+    scenario = compile_document(parse_yaml(yaml_text))
+    if not isinstance(scenario, CompiledScenarioV2):
+        raise Engine2EvidenceError("dsl_version", "Engine 2 requires a DSL 2 definition")
+    return scenario
+
+
+def execute_engine2(
+    scenario: Any, root_seed: str | int, schedule_seed: int, *, run_index: int = 0,
+    inputs: Mapping[str, Any] | None = None, plugins: Any = None,
+) -> tuple[Engine2Result, ScheduleArtifact]:
+    """Execute validated DSL 2 actors and return immutable Result/2 and Schedule/1."""
+    from .dsl import CompiledScenarioV2
+    from .dsl.actor_runtime import execute_actors_internal
+    if not isinstance(scenario, CompiledScenarioV2):
+        raise TypeError("scenario must be a validated CompiledScenarioV2")
+    outcome = execute_actors_internal(
+        scenario, root_seed, schedule_seed, run_index=run_index, inputs=inputs, plugins=plugins,
+    )
+    result = construct_result2(scenario, outcome)
+    return result, outcome.schedule
+
+
+def replay_engine2(
+    result: Engine2Result | bytes | str, schedule: ScheduleArtifact | bytes | str,
+    scenario: Any, *, inputs: Mapping[str, Any] | None = None, plugins: Any = None,
+) -> Engine2Result:
+    """Exactly replay supplied Result/2 and Schedule/1 evidence and return Result/2."""
+    evidence = result if isinstance(result, Engine2Result) else read_result2(result)
+    exact_replay_result2_internal(evidence, schedule, scenario, inputs=inputs, plugins=plugins)
+    return evidence
+
+
+__all__ = (
+    "Engine2EvidenceBoundError", "Engine2EvidenceError", "Engine2Manifest",
+    "Engine2ReplayMismatch", "Engine2Result", "ScheduleReference",
+    "canonical_manifest2_bytes", "canonical_manifest2_identity_bytes",
+    "canonical_result2_bytes", "canonical_result2_identity_bytes", "execute_engine2",
+    "read_manifest2", "read_result2", "replay_engine2", "validate_engine2",
+)

@@ -65,6 +65,25 @@ Incompatible replay fails closed with exit 5. Stable rejection reasons include
 `MIGRATION_AVAILABLE` or `MIGRATION_UNAVAILABLE`. These codes describe rejection
 and never weaken compatibility checks or trigger automatic migration.
 
+### DSL 2 logical actors
+
+DSL 2 uses Engine 2 and requires an independent unsigned 64-bit schedule seed.
+The generation `--seed` is never reinterpreted or used to derive it. Result/2 is
+written to stdout; `--result-out` is optional, while the replay-authoritative
+Schedule/1 destination is required and must be an absent absolute local path.
+
+```console
+scenario validate "$DSE_DEMO/actors.yaml"
+scenario --json run "$DSE_DEMO/actors.yaml" --seed generation-seed --schedule-seed 7 --run-index 0 --schedule-out "$DSE_DEMO/schedule.json" --result-out "$DSE_DEMO/result.json"
+scenario --json replay "$DSE_DEMO/result.json" --scenario "$DSE_DEMO/actors.yaml" --schedule "$DSE_DEMO/schedule.json" > "$DSE_DEMO/replayed-result.json"
+cmp "$DSE_DEMO/result.json" "$DSE_DEMO/replayed-result.json"
+```
+
+Both outputs are constructed before publication. Each destination is published
+atomically as an absent file; if this command publishes one output and then the
+other publication fails, it removes the output created by this command. This is
+safe staging/finalization behavior, not a claim of filesystem-wide atomicity.
+
 ## Inspect / explain
 
 ```console

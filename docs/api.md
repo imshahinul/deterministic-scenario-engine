@@ -58,6 +58,28 @@ checks recorded compatibility before returning a replayed `ScenarioResult`.
 `evaluate_scenario()` returns `OracleEvaluation` and optionally raises on an
 oracle mismatch.
 
+### Engine 2 explicit public workflow
+
+These names are explicitly public from `scenario_engine.engine2` (execution and
+replay) and `scenario_engine.compatibility` (classification). They are not added
+to the compatibility-frozen package root.
+
+```python
+validate_engine2(yaml_text: str) -> CompiledScenarioV2
+execute_engine2(scenario: CompiledScenarioV2, root_seed: str | int, schedule_seed: int, *, run_index: int = 0, inputs: Mapping[str, Any] | None = None, plugins: PluginRegistry | None = None) -> tuple[Engine2Result, ScheduleArtifact]
+replay_engine2(result: Engine2Result | bytes | str, schedule: ScheduleArtifact | bytes | str, scenario: CompiledScenarioV2, *, inputs: Mapping[str, Any] | None = None, plugins: PluginRegistry | None = None) -> Engine2Result
+classify_engine_contract(*, dsl_version: int | None, engine_version: str | None, result_contract: str | None, operation: str) -> CompatibilityDecision
+```
+
+`validate_engine2()` accepts only DSL 2. `execute_engine2()` requires both the
+generation root seed and independent schedule seed and returns immutable,
+canonically serializable Result/2 and Schedule/1 evidence. `replay_engine2()`
+strictly reads supplied evidence when bytes or text are given, independently
+executes every recorded scheduler choice, verifies all coordinates and final
+observations, and returns the verified immutable Result/2. It never reconstructs
+missing schedule evidence. Compatibility classification is explicit and does not
+execute, migrate, or promote evidence. Existing Engine 1 functions are unchanged.
+
 ## Canonical scenario functions
 
 ```python

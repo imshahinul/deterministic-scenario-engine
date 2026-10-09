@@ -202,7 +202,7 @@ def test_t41_t47_immutable_bounded_redacted_and_cross_process_deterministic(monk
     assert outputs[0] == outputs[1]
 
 
-def test_t54_dsl2_public_run_remains_unsupported() -> None:
+def test_t54_legacy_run_scenario_remains_unsupported_for_dsl2() -> None:
     compiled, _, _ = produced()
     with pytest.raises(UnsupportedDSL2ExecutionError): run_scenario(compiled, "root")
 
