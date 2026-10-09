@@ -80,6 +80,15 @@ observations, and returns the verified immutable Result/2. It never reconstructs
 missing schedule evidence. Compatibility classification is explicit and does not
 execute, migrate, or promote evidence. Existing Engine 1 functions are unchanged.
 
+The immutable Engine 2 evidence access names are also public from their explicit
+modules: `Engine2Manifest`, `Engine2Result`, `ScheduleReference`,
+`read_manifest2()`, `read_result2()`, and their canonical byte functions from
+`scenario_engine.engine2`; and `ScheduleArtifact`, `read_schedule()`, and its
+canonical byte functions from `scenario_engine.schedule`. `read_suite_run2()` is
+schema/reader validation only and does not execute a suite. Errors remain in the
+`Engine2EvidenceError`/`Engine2EvidenceBoundError`/`Engine2ReplayMismatch` and
+`ScheduleError`/`ScheduleBoundError`/`ScheduleReplayMismatch` families.
+
 ## Canonical scenario functions
 
 ```python

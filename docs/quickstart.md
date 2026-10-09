@@ -84,6 +84,16 @@ atomically as an absent file; if this command publishes one output and then the
 other publication fails, it removes the output created by this command. This is
 safe staging/finalization behavior, not a claim of filesystem-wide atomicity.
 
+The installed immutable Engine 2 compatibility examples can be exported and
+verified without source-tree access:
+
+```console
+scenario compatibility-fixtures export --pack phase5_10 --out "$DSE_DEMO/phase5_10-fixtures"
+scenario --json replay "$DSE_DEMO/phase5_10-fixtures/artifacts/result-v2.json" --scenario "$DSE_DEMO/phase5_10-fixtures/scenarios/scenario-v2.yaml" --schedule "$DSE_DEMO/phase5_10-fixtures/artifacts/schedule-v1.json"
+```
+
+Omitting `--pack` retains the historical Phase 4 fixture export unchanged.
+
 ## Inspect / explain
 
 ```console

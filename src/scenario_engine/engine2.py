@@ -100,10 +100,13 @@ def _actor(value: object, field_name: str) -> str:
     if not isinstance(value, str) or _ACTOR.fullmatch(value) is None:
         raise Engine2EvidenceError(field_name, "must be a canonical actor address")
     from .scheduler import SchedulerInput
-    checked = SchedulerInput(
-        "0" * 64, {}, 0, 0, 0, 0, datetime(1970, 1, 1, tzinfo=timezone.utc),
-        (value,), (value,),
-    ).declared_actors[0]
+    try:
+        checked = SchedulerInput(
+            "0" * 64, {}, 0, 0, 0, 0, datetime(1970, 1, 1, tzinfo=timezone.utc),
+            (value,), (value,),
+        ).declared_actors[0]
+    except ValueError:
+        raise Engine2EvidenceError(field_name, "must be a canonical actor address") from None
     if checked != value:
         raise Engine2EvidenceError(field_name, "must be a canonical actor address")
     return value

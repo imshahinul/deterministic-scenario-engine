@@ -22,7 +22,9 @@ from scenario_engine.composition import (
     UnsupportedCompositionSourceError,
     execute_composed_suite, load_composed_suite,
 )
-from scenario_engine.compatibility_fixtures import export_compatibility_fixtures
+from scenario_engine.compatibility_fixtures import (
+    export_compatibility_fixtures, export_engine2_compatibility_fixtures,
+)
 from scenario_engine.diff import (
     DEFAULT_MAX_DIFF_RECORDS, DiffBoundError, DiffError, canonical_diff_bytes,
     render_diff_text, semantic_diff,
@@ -342,6 +344,10 @@ def _parser() -> argparse.ArgumentParser:
     fixture_export.add_argument(
         "--out", required=True,
         help="absent absolute local filesystem path for the exported frozen fixture directory",
+    )
+    fixture_export.add_argument(
+        "--pack", choices=("phase4_11", "phase5_10"), default="phase4_11",
+        help="immutable fixture pack (default: phase4_11 for backward compatibility)",
     )
 
     export = commands.add_parser("export", help="copy a verified local evidence bundle to an absent destination")
@@ -1167,11 +1173,13 @@ def _verify(args: argparse.Namespace) -> tuple[bytes, bytes]:
 
 def _compatibility_fixtures(args: argparse.Namespace) -> tuple[bytes, bytes]:
     destination = _require_absolute_local(args.out, "compatibility fixture destination")
-    exported = export_compatibility_fixtures(destination)
+    exported = (export_engine2_compatibility_fixtures(destination)
+                if args.pack == "phase5_10" else export_compatibility_fixtures(destination))
     value = {
         "command": "compatibility-fixtures export",
         "destination": str(exported),
-        "schema": "scenario.compatibility-fixtures/1",
+        "schema": ("scenario.compatibility-fixtures/2" if args.pack == "phase5_10"
+                   else "scenario.compatibility-fixtures/1"),
     }
     return _canonical(value), f"exported frozen compatibility fixtures to {exported}\n".encode()
 

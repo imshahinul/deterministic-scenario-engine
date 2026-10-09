@@ -53,7 +53,7 @@ include = ["scenario_engine*"]
 namespaces = false
 
 [tool.setuptools.package-data]
-scenario_engine = ["data/compatibility/phase4_11/**/*"]
+scenario_engine = ["data/compatibility/phase4_11/**/*", "data/compatibility/phase5_10/**/*"]
 
 [tool.unittest]
 start-directory = "tests"

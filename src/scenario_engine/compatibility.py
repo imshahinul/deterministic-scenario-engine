@@ -42,7 +42,8 @@ def classify_engine_contract(
         return CompatibilityDecision(CompatibilityClassification.UNKNOWN_CONTRACT, operation)
     if (dsl_version, engine_version) == expected:
         return CompatibilityDecision(CompatibilityClassification.SUPPORTED_EXACT, operation)
-    if result_contract == "scenario.result/1" and operation == "inspect" and engine_version == "2.0.0":
+    if (result_contract == "scenario.result/1" and operation == "inspect" and
+            dsl_version == 1 and engine_version == "2.0.0"):
         return CompatibilityDecision(CompatibilityClassification.SUPPORTED_LEGACY_OPERATION, operation)
     if dsl_version not in (1, 2) or engine_version not in ("1.0.0", "2.0.0"):
         return CompatibilityDecision(CompatibilityClassification.UNKNOWN_VERSION, operation)

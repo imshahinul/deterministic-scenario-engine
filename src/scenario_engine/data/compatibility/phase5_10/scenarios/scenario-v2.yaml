@@ -1,0 +1,15 @@
+dsl_version: 2
+scenario: compatibility-actors
+clock: {start: '2026-01-01T00:00:00Z'}
+initial_state: {count: 0}
+actors:
+  - id: alpha
+    steps:
+      - id: increment
+        write: {count: {$add: [{$state: count}, {$literal: 1}]}}
+        transition: null
+  - id: beta
+    steps:
+      - id: observe
+        write: {observed: {$state: count}}
+        transition: null
