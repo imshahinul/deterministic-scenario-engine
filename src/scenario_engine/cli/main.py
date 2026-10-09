@@ -231,11 +231,16 @@ def _parser() -> argparse.ArgumentParser:
 
     trace_view = commands.add_parser(
         "trace-view", help="render a self-contained offline HTML trace view",
-        description=("Render one supported local result or suite.run/1 artifact as one read-only "
-                     "HTML file. No server, network, telemetry, or source mutation is used."),
+        description=("Render one supported local Result/1, Result/2, or suite.run/1 artifact as "
+                     "one read-only HTML file. Result/2 optionally accepts a matching Schedule/1. "
+                     "No server, network, telemetry, execution, or source mutation is used."),
     )
-    trace_view.add_argument("source", help="absolute local result or suite.run/1 JSON path")
+    trace_view.add_argument("source", help="absolute local Result/1, Result/2, or suite.run/1 JSON path")
     trace_view.add_argument("--out", required=True, help="absent absolute local HTML output path")
+    trace_view.add_argument(
+        "--schedule", metavar="PATH",
+        help="optional matching absolute local scenario.schedule/1 path for scenario.result/2",
+    )
 
     hash_command = commands.add_parser("hash", help="print semantic scenario identity")
     _source(hash_command)
@@ -799,6 +804,7 @@ def _trace_view(args: argparse.Namespace) -> tuple[bytes, bytes]:
     except (json.JSONDecodeError, ValueError):
         raise TraceViewError("TRACE_INPUT_UNSUPPORTED", "trace-view input must be strict supported JSON") from None
     artifact: Any
+    schedule = None
     if isinstance(raw, Mapping) and raw.get("$model") == "RunManifestEnvelope":
         try:
             artifact = parse_suite_bytes(data)
@@ -806,12 +812,26 @@ def _trace_view(args: argparse.Namespace) -> tuple[bytes, bytes]:
             raise TraceViewError("TRACE_INPUT_UNSUPPORTED", "suite.run/1 trace input is invalid") from None
         if not isinstance(artifact, RunManifestEnvelope):
             raise TraceViewError("TRACE_INPUT_UNSUPPORTED", "suite artifact is not suite.run/1")
+    elif isinstance(raw, Mapping) and raw.get("contract") == "scenario.result/2":
+        try:
+            artifact = read_result2(data)
+        except Engine2EvidenceError:
+            raise TraceViewError("TRACE_INPUT_UNSUPPORTED", "scenario.result/2 trace input is invalid") from None
+        if args.schedule is not None:
+            schedule_path = _require_absolute_local(args.schedule, "trace-view schedule")
+            try:
+                schedule_data = _read(str(schedule_path), limit=TRACE_VIEW_MAX_INPUT_BYTES)
+                schedule = read_schedule(schedule_data)
+            except ScheduleError:
+                raise TraceViewError("TRACE_SCHEDULE_INVALID", "supplied schedule evidence is invalid") from None
     else:
+        if args.schedule is not None:
+            raise TraceViewError("TRACE_SCHEDULE_UNSUPPORTED", "--schedule requires scenario.result/2")
         try:
             artifact = read_v1_result_bytes(data)
         except (ArtifactReadError, SuiteSerializationError):
             raise TraceViewError("TRACE_INPUT_UNSUPPORTED", "artifact is not a supported v1 result") from None
-    rendered = render_trace_view(artifact)
+    rendered = render_trace_view(artifact, schedule=schedule)
     try:
         publish_suite_bytes(rendered, destination)
     except FileExistsError:

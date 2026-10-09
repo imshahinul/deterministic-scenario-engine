@@ -8,7 +8,9 @@ import html
 import json
 from typing import Any, Mapping, Sequence
 
+from scenario_engine.engine2 import Engine2Result, canonical_result2_bytes
 from scenario_engine.inspection.redaction import redact_mapping, validate_redacted_keys
+from scenario_engine.schedule import ScheduleArtifact
 from scenario_engine.suite import ArtifactOrigin, ArtifactReadModel, RunManifestEnvelope
 from scenario_engine.suite.serialization import canonical_suite_bytes
 from scenario_engine.values import normalize
@@ -33,9 +35,14 @@ class TraceViewError(ValueError):
         super().__init__(message)
 
 
-def render_trace_view(artifact: ArtifactReadModel | RunManifestEnvelope) -> bytes:
+def render_trace_view(
+    artifact: ArtifactReadModel | RunManifestEnvelope | Engine2Result, *,
+    schedule: ScheduleArtifact | None = None,
+) -> bytes:
     """Render one validated artifact without execution or state reconstruction."""
-    document = _document(artifact)
+    if schedule is not None and not isinstance(artifact, Engine2Result):
+        raise TraceViewError("TRACE_SCHEDULE_UNSUPPORTED", "schedule context requires scenario.result/2")
+    document = _document(artifact, schedule)
     payload = _canonical(document)
     digest = hashlib.sha256(_source_bytes(artifact)).hexdigest()
     sections = _sections(document)
@@ -54,19 +61,27 @@ def render_trace_view(artifact: ArtifactReadModel | RunManifestEnvelope) -> byte
         "h1,h2,h3{font-family:system-ui,sans-serif}dl{display:grid;grid-template-columns:max-content 1fr;gap:.4rem 1rem}"
         "dt{font-weight:bold}dd{margin:0;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere}"
         ".event{border-left:.3rem solid #678;padding-left:1rem}.muted{opacity:.75}"
+        ".lane{border-left:.3rem solid #876;padding-left:1rem}"
         "</style></head><body><header><h1>Deterministic Scenario Engine trace</h1>"
         f"<p>Read-only offline view · input SHA-256 <code>{digest}</code></p></header>{body}"
         "<section aria-label=\"embedded evidence\"><h2>Embedded bounded evidence</h2>"
         f"<pre id=\"scenario-evidence\">{embedded}</pre></section>"
-        "<footer><p>Single-stream presentation. Actor/lane presentation space is reserved; "
-        "actor/lane execution is not implemented.</p></footer></body></html>\n"
+        + ("<footer><p>Logical actor lanes are filtered views of one global committed history; "
+           "they do not represent operating-system threads or simultaneous execution.</p></footer>"
+           if isinstance(artifact, Engine2Result) else
+           "<footer><p>Single-stream presentation. Actor/lane presentation space is reserved; "
+           "actor/lane execution is not implemented.</p></footer>")
+        + "</body></html>\n"
     ).encode("utf-8")
     if len(rendered) > TRACE_VIEW_MAX_OUTPUT_BYTES:
         raise TraceViewError("TRACE_OUTPUT_TOO_LARGE", "trace-view HTML exceeds its output byte bound")
     return rendered
 
 
-def _document(artifact: ArtifactReadModel | RunManifestEnvelope) -> dict[str, Any]:
+def _document(
+    artifact: ArtifactReadModel | RunManifestEnvelope | Engine2Result,
+    schedule: ScheduleArtifact | None,
+) -> dict[str, Any]:
     if isinstance(artifact, ArtifactReadModel):
         if artifact.origin is not ArtifactOrigin.V1_RESULT:
             raise TraceViewError("TRACE_INPUT_UNSUPPORTED", "artifact does not contain a supported trace result")
@@ -92,7 +107,60 @@ def _document(artifact: ArtifactReadModel | RunManifestEnvelope) -> dict[str, An
             "presentation": {"actor_lane_reserved": True, "stream": "single"},
             "evidence": _bounded(redact_mapping(payload, validate_redacted_keys(None)), 0),
         }
+    if isinstance(artifact, Engine2Result):
+        _validate_schedule_linkage(artifact, schedule)
+        if len(artifact.history) > TRACE_VIEW_MAX_EVENTS:
+            raise TraceViewError("TRACE_INPUT_TOO_LARGE", "result history exceeds the event bound")
+        payload = _bounded(redact_mapping(dict(artifact.payload()), validate_redacted_keys(None)), 0)
+        schedule_payload = None if schedule is None else _bounded(
+            redact_mapping(dict(schedule.payload()), validate_redacted_keys(None)), 0,
+        )
+        return {
+            "contract": TRACE_VIEW_CONTRACT,
+            "input_contract": artifact.contract,
+            "renderer_version": TRACE_VIEW_RENDERER_VERSION,
+            "presentation": {"actor_lane_reserved": False, "stream": "global-with-actor-filters"},
+            "integrity": {
+                "canonical_hashes": "verified",
+                "exact_execution_replay": "not performed",
+                "schedule_context": "available" if schedule else "unavailable",
+                "structurally_accepted": True,
+            },
+            "evidence": payload,
+            "schedule": schedule_payload,
+        }
     raise TraceViewError("TRACE_INPUT_UNSUPPORTED", "artifact contract is unsupported")
+
+
+def _validate_schedule_linkage(result: Engine2Result, schedule: ScheduleArtifact | None) -> None:
+    if schedule is None:
+        return
+    manifest = result.manifest
+    actor_names = tuple(item["actor"] for item in result.actors)
+    failure = None if result.failure is None else result.failure.payload()
+    schedule_failure = None if schedule.failure is None else schedule.failure.payload()
+    checks = (
+        (result.schedule_reference.schedule_hash, schedule.schedule_hash),
+        (manifest.scenario_hash, schedule.scenario_hash),
+        (actor_names, schedule.actors),
+        (manifest.root_seed, schedule.execution.root_seed),
+        (manifest.schedule_seed, schedule.schedule_seed),
+        (dict(manifest.input_resource_hashes), dict(schedule.input_resource_hashes)),
+        (manifest.run_index, schedule.run_index),
+        (manifest.scheduler_contract, schedule.scheduler_contract),
+        (manifest.dsl_version, schedule.execution.dsl_version),
+        (manifest.engine_version, schedule.execution.engine_version),
+        (manifest.reference_clock_start, schedule.execution.reference_clock_start),
+        (dict(manifest.generator_versions), dict(schedule.execution.generator_versions)),
+        (result.classification, schedule.classification),
+        (failure, schedule_failure),
+    )
+    if any(expected != received for expected, received in checks):
+        raise TraceViewError("TRACE_SCHEDULE_MISMATCH", "schedule does not match result evidence")
+    committed = [record for record in schedule.records if record.outcome == "COMMITTED"]
+    if ([record.committed_history_length for record in committed] != list(range(len(result.history))) or
+            len(committed) != len(result.history)):
+        raise TraceViewError("TRACE_SCHEDULE_MISMATCH", "schedule commit coordinates do not match result history")
 
 
 def _bounded(value: Any, depth: int) -> Any:
@@ -113,13 +181,17 @@ def _canonical(value: Any) -> bytes:
     return json.dumps(value, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
-def _source_bytes(artifact: ArtifactReadModel | RunManifestEnvelope) -> bytes:
+def _source_bytes(artifact: ArtifactReadModel | RunManifestEnvelope | Engine2Result) -> bytes:
     if isinstance(artifact, RunManifestEnvelope):
         return canonical_suite_bytes(artifact)
+    if isinstance(artifact, Engine2Result):
+        return canonical_result2_bytes(artifact)
     return _canonical(normalize(artifact.payload))
 
 
 def _sections(document: Mapping[str, Any]) -> list[str]:
+    if document["input_contract"] == "scenario.result/2":
+        return _actor_sections(document)
     evidence = document["evidence"]
     manifest = evidence.get("manifest") if isinstance(evidence, Mapping) else None
     if not isinstance(manifest, Mapping):
@@ -164,6 +236,87 @@ def _sections(document: Mapping[str, Any]) -> list[str]:
     if hashes:
         result.append("<section><h2>Provenance and hashes</h2>" + _definition_list(hashes) + "</section>")
     return result
+
+
+def _actor_sections(document: Mapping[str, Any]) -> list[str]:
+    evidence = document["evidence"]
+    schedule = document.get("schedule")
+    manifest = evidence["manifest"]
+    selections = {
+        record["committed_history_length"]: record for record in schedule["records"]
+        if record["outcome"] == "COMMITTED"
+    } if isinstance(schedule, Mapping) else {}
+    metadata = {
+        "scenario identity": evidence["scenario_id"], "input contract": document["input_contract"],
+        "viewer contract": document["contract"], "engine version": manifest["engine_version"],
+        "manifest version": manifest["contract"], "DSL version": manifest["dsl_version"],
+        "execution seed": manifest["root_seed"], "scenario hash": manifest["scenario_hash"],
+    }
+    result = ["<section><h2>Identity and versions</h2>" + _definition_list(metadata) + "</section>"]
+    integrity = document["integrity"]
+    result.append("<section><h2>Evidence integrity</h2>" + _definition_list({
+        "structurally accepted evidence": integrity["structurally_accepted"],
+        "canonical hash verification": integrity["canonical_hashes"],
+        "exact execution replay": integrity["exact_execution_replay"],
+        "schedule selection context": integrity["schedule_context"],
+    }) + "</section>")
+    events = []
+    for index, event in enumerate(evidence["history"]):
+        selection = selections.get(index)
+        data = {
+            "global history index": index, "actor identity": event["actor"],
+            "step semantic address": event["address"], "logical clock": event["timestamp"],
+            "transition status": "COMMITTED", "transition": event["transition"],
+            "shared-state change": event["patch"], "state before fingerprint": event["pre"],
+            "state after fingerprint": event["post"], "artifact/emission references": event["artifacts"],
+            "faults applied": event["faults_applied"],
+            "selection ordinal": selection["selection_ordinal"] if selection else "unavailable",
+        }
+        events.append(f'<article class="event"><h3>Commit {index}</h3>{_definition_list(data)}</article>')
+    result.append("<section><h2>Global committed-history timeline</h2>" + ("".join(events) or _missing()) + "</section>")
+    failed = [record for record in schedule["records"] if record["outcome"] == "FAILED"] if isinstance(schedule, Mapping) else []
+    lanes = []
+    controls = {item["actor"]: item for item in evidence["actors"]}
+    for actor in sorted(controls, key=str.encode):
+        lane_events = []
+        for index, event in enumerate(evidence["history"]):
+            if event["actor"] == actor:
+                lane_events.append(_definition_list({
+                    "global history index": index, "step semantic address": event["address"],
+                    "logical clock": event["timestamp"], "transition status": "COMMITTED",
+                    "shared-state change": event["patch"],
+                }))
+        attempts = [_selection_details(record) for record in failed if record["selected_actor"] == actor]
+        control = controls[actor]
+        lanes.append(f'<article class="lane"><h3>{html.escape(actor, quote=True)}</h3>' + _definition_list({
+            "canonical actor identity": actor, "next step": control["next_step"],
+            "terminal": control["terminal"], "committed transition count": len(lane_events),
+        }) + "".join(lane_events) + "".join(attempts) + "</article>")
+    result.append("<section><h2>Actor lanes</h2>" + "".join(lanes) + "</section>")
+    if isinstance(schedule, Mapping):
+        context = [_selection_details(record) for record in schedule["records"]]
+        result.append("<section><h2>Authoritative scheduler-selection context</h2>" + "".join(context) + "</section>")
+    else:
+        result.append('<section><h2>Authoritative scheduler-selection context</h2>'
+                      '<p class="muted">unavailable — no schedule evidence supplied; no ready sets or ordinals inferred</p></section>')
+    result.append("<section><h2>Terminal outcome</h2>" + _definition_list({
+        "classification": evidence["classification"], "failure": evidence["failure"],
+        "final logical clock": evidence["final_logical_clock"],
+    }) + "</section>")
+    for title, key in (("Final observed state", "final_state"), ("Emitted artifacts", "artifacts"),
+                       ("Execution provenance", "provenance")):
+        result.append(f"<section><h2>{title}</h2>{_pre(evidence[key])}</section>")
+    result.append("<section><h2>Provenance and hashes</h2>" + _definition_list(_public_hashes(evidence)) + "</section>")
+    return result
+
+
+def _selection_details(record: Mapping[str, Any]) -> str:
+    return '<article class="event"><h3>Selection context</h3>' + _definition_list({
+        "selection ordinal": record["selection_ordinal"], "canonical ready-actor set": record["ready_actors"],
+        "selected actor": record["selected_actor"], "scheduler identity": record["scheduler_digest"],
+        "preselection committed-history length": record["committed_history_length"],
+        "preselection logical clock": record["logical_clock"], "selection outcome": record["outcome"],
+    }) + "</article>"
 
 
 def _public_hashes(value: Any, prefix: str = "") -> dict[str, Any]:

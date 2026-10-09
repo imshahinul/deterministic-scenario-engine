@@ -165,6 +165,18 @@ The source and absent destination are absolute local filesystem paths. The
 command accepts `scenario.result/1` and `suite.run/1` and writes exactly one
 self-contained `scenario.trace-view/1` HTML file. It is offline, read-only, and
 uses no server, network, telemetry, CDN assets, or source mutation. Open the file
+directly in a browser. Actor-aware `scenario.result/2` evidence uses the same
+command and contract; optional matching scheduler context is supplied explicitly:
+
+```console
+scenario trace-view "$DSE_DEMO/result-v2.json" --schedule "$DSE_DEMO/schedule.json" --out "$DSE_DEMO/trace-v2.html"
+```
+
+Without `--schedule`, Result/2 committed history and actor lanes remain available
+and scheduler-selection context is labeled unavailable. The public Python form is
+`render_trace_view(result)` or `render_trace_view(result, schedule=schedule)` from
+`scenario_engine.trace_view`. Static hash/linkage checks do not claim exact replay;
+the viewer always labels exact execution replay as not performed. Open it
 locally. The viewer displays only evidence present in the input; it never reruns
 the scenario or reconstructs missing runtime state.
 
