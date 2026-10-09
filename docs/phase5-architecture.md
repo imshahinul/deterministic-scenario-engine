@@ -416,6 +416,70 @@ histories. Artifact order is global commit order and then existing declaration
 order within a committed step. Mapping normalization remains key-sorted. Failed
 attempts appear in schedule/failure evidence, not as committed history.
 
+### 9.1 Frozen Engine 2 manifest and result wire contracts
+
+Phase 5.5 freezes `scenario.manifest/2` as an exact-field canonical object. Its
+required fields are `contract`, `manifest_hash`, `scenario_hash`,
+`engine_version`, `dsl_version`, `execution_model`, `root_seed`,
+`schedule_seed`, `scheduler_contract`, `input_resource_hashes`,
+`domain_pack_versions`, `generator_versions`, `rng_algorithm_version`,
+`id_algorithm_version`, `locale`, `reference_clock_start`, and `run_index`.
+There are no optional or extension fields. `contract`, `engine_version`,
+`dsl_version`, `execution_model`, and `scheduler_contract` are exactly
+`scenario.manifest/2`, `2.0.0`, integer `2`, `logical-actors/1`, and
+`scenario.scheduler/1`. Seeds are independent coordinates: `root_seed` is a
+string or integer excluding Boolean and `schedule_seed` is an unsigned 64-bit
+integer. Hash maps map strings to strings and are key-sorted. The reference
+clock is an aware datetime normalized to UTC; locale is exactly `C`; run index
+is nonnegative. `manifest_hash` is lowercase SHA-256 over the existing DSE
+canonical compact UTF-8 JSON representation of the complete object with only
+`manifest_hash` omitted. Readers reject missing, unknown, duplicate, malformed,
+noncanonical, or unsupported fields and versions rather than repairing them.
+
+`scenario.result/2` is likewise an exact-field canonical object with required
+fields `contract`, `result_hash`, `manifest`, `scenario_id`,
+`schedule_reference`, `classification`, `failure`, `final_state`,
+`final_logical_clock`, `history`, `artifacts`, `actors`, and `provenance`.
+There are no optional or extension fields; absence is represented by `null` or
+an empty sequence as specified here. `schedule_reference` has exactly
+`contract`, `schedule_hash`, and `scenario_hash`; these are respectively
+`scenario.schedule/1`, its verified canonical identity hash, and the same
+scenario hash as the manifest. Thus evidence from different scenarios or
+inputs cannot be recombined merely because one nested hash was copied: exact
+replay also verifies every manifest and schedule coordinate.
+
+`classification` is `SUCCESS` or `FAILED`. Success requires `failure: null`.
+Failure requires exactly `actor`, stable nonempty `code`, and
+`selection_ordinal`, matching the authoritative schedule terminal failure; no
+successful result may be fabricated from a failed or absent execution outcome.
+`history` is the global committed order and each item has exactly `actor`,
+`address`, `timestamp`, `pre`, `patch`, `post`, `artifacts`,
+`faults_applied`, and `transition`. Actor and address are canonical semantic
+addresses and must agree. `artifacts` preserves global commit/declaration order
+and each item has exactly `actor`, `address`, `id`, `name`, `type`, and `value`.
+`actors` is canonical actor-address order and each item has exactly `actor`,
+`next_step`, and `terminal`. `provenance` is always a sequence; Engine 2 actor
+execution currently emits no separate provenance records and therefore records
+the truthful empty sequence rather than inventing facts.
+
+`result_hash` is lowercase SHA-256 over existing DSE canonical compact UTF-8
+JSON for the complete normalized result with only `result_hash` omitted. The
+32 MiB result ceiling applies to the complete representation including the
+hash. Construction snapshots and recursively freezes all retained semantic
+values. Strict readers enforce the byte ceiling before JSON decoding, reject
+duplicate keys and excessive nesting, enforce exact fields and semantic types,
+reconstruct immutable evidence, verify nested manifest and result hashes, and
+require byte-for-byte canonical input. No host path, process identity,
+wall-clock timestamp, ambient metadata, unsafe deserialization, remote fetch,
+or silent truncation is permitted.
+
+Exact Result/2 replay accepts a separately supplied authoritative
+`scenario.schedule/1`; it never reconstructs decisions from history. It first
+checks the result/manifest/schedule contract tuple and all shared coordinates,
+then invokes the Phase 5.4 exact schedule verifier, then compares final state,
+global committed history, final logical clock, actor control summary, artifacts,
+and terminal/failure classification. A hash match alone is never replay proof.
+
 Actor-aware diagnostics continue to use `scenario.error/1`. Its
 `semantic_path`, when available, is the canonical actor or actor-step semantic
 address; bounded details may carry safe schedule ordinal and contract identifiers.
@@ -459,6 +523,36 @@ supported only where a separately frozen exact route exists; none is inferred.
 or exact immutable references with hashes under a separately approved storage
 form. It cannot wrap an Engine 1 child while claiming Engine 2 replay semantics.
 `suite.run/1` remains byte- and meaning-stable.
+
+Phase 5.5 freezes only the bounded schema, canonical reader, and validator for
+`suite.run/2`; suite execution remains deferred. The exact required fields are
+`contract`, `suite_hash`, and `members`, with no optional or extension fields.
+Each member has exactly `result_contract`, `result_hash`, `manifest_contract`,
+`manifest_hash`, `schedule_contract`, and `schedule_hash`. Contract identities
+must be exactly `scenario.result/2`, `scenario.manifest/2`, and
+`scenario.schedule/1`; every hash is lowercase SHA-256. Members are nonempty,
+unique by `result_hash`, bounded to 10,000, and stored in unsigned UTF-8
+lexicographic order of `(result_hash, manifest_hash, schedule_hash)`.
+`suite_hash` is SHA-256 over existing DSE canonical bytes of the complete object
+with only `suite_hash` omitted. The strict reader uses the 32 MiB native Engine
+2 evidence ceiling, rejects malformed/noncanonical JSON, duplicate/missing/
+unknown fields and unsupported child contracts, and verifies the suite hash.
+This container does not schedule, execute, migrate, fetch, or embed children;
+child-reference resolution and suite orchestration remain outside Phase 5.5.
+
+### 11.1 Internal compatibility classification and dispatch
+
+The internal finite classification contract is `scenario.compatibility/2` and
+returns one of `SUPPORTED_EXACT`, `SUPPORTED_LEGACY_OPERATION`,
+`UNSUPPORTED_CROSS_MAJOR`, `UNKNOWN_CONTRACT`, `UNKNOWN_VERSION`, or
+`INCOMPLETE_COORDINATES`, plus the requested operation. Exact execution dispatch
+is only `(DSL 1, Engine 1.0.0, scenario.result/1)` or
+`(DSL 2, Engine 2.0.0, scenario.result/2)`. Engine 2 inspection of a Result/1
+may be explicitly classified as a supported historical operation, but Engine 2
+replay of Result/1 is unsupported; Engine 1 consumption of Result/2 is
+unsupported. Unknown tuples fail closed. Classification never executes,
+migrates, promotes, or mutates evidence and does not alter existing historical
+compatibility reports.
 
 Existing public Python names, signatures, commands, options, streams, exit-code
 families, and contract behavior remain compatible for DSL 1 and v1 artifacts.
