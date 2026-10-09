@@ -13,7 +13,7 @@ import json
 import re
 from typing import Any, Iterable, Mapping, Sequence
 
-from scenario_engine._version import ENGINE_VERSION
+from scenario_engine._version import ENGINE1_VERSION
 
 from .errors import EvidenceBoundError, EvidenceContractError
 from .models import _contract, _identifier, _sha256
@@ -367,7 +367,7 @@ def _required(source: ArtifactDescriptor, names: tuple[CompatibilityRequirement,
     for name in names:
         item = values.get(name)
         if item is None:
-            expected = ENGINE_VERSION if name is CompatibilityRequirement.ENGINE_VERSION else "1" if name is CompatibilityRequirement.DSL_VERSION else "required"
+            expected = ENGINE1_VERSION if name is CompatibilityRequirement.ENGINE_VERSION else "1" if name is CompatibilityRequirement.DSL_VERSION else "required"
             item = RequirementCoordinate(name, expected)
         requirements.append(item)
     ordered = tuple(sorted(requirements, key=lambda item: item.requirement.value))

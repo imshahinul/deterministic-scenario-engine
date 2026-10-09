@@ -1,5 +1,8 @@
 # Canonical installed-package workflows
 
+**3.0.0 candidate documentation — PREPUBLICATION.** These commands apply to a
+qualified candidate installation and do not assert that 3.0.0 is on PyPI.
+
 This is the canonical DSE user workflow document. Every ordinary command below
 uses the installed package and portable files created here; no source checkout,
 repository example, network service, API key, or maintainer-local path is needed.
@@ -71,6 +74,8 @@ DSL 2 uses Engine 2 and requires an independent unsigned 64-bit schedule seed.
 The generation `--seed` is never reinterpreted or used to derive it. Result/2 is
 written to stdout; `--result-out` is optional, while the replay-authoritative
 Schedule/1 destination is required and must be an absent absolute local path.
+The resulting Manifest/2 records Engine 2.0.0 and integer DSL 2. The existing
+DSL 1 workflow remains Engine 1.0.0 with Result/1, Manifest/1, and Suite Run/1.
 
 ```console
 cat > "$DSE_DEMO/actors.yaml" <<'YAML'

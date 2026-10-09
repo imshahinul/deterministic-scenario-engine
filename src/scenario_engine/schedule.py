@@ -10,6 +10,7 @@ import re
 from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
+from ._version import ENGINE_VERSION
 from .canonical import canonical_scenario_hash
 from .ids import ID_VERSION
 from .manifest import GENERATOR_VERSIONS
@@ -24,7 +25,7 @@ from .values import canonical_bytes
 
 
 SCHEDULE_CONTRACT = "scenario.schedule/1"
-ENGINE2_EXECUTION_VERSION = "2.0.0"
+ENGINE2_EXECUTION_VERSION = ENGINE_VERSION
 MAX_CANONICAL_SCHEDULE_BYTES = 8_388_608
 MAX_REPLAY_SCHEDULER_SELECTIONS_VERIFIED = 65_536
 MAX_SCHEDULE_NESTING_DEPTH = 32

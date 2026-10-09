@@ -4,10 +4,11 @@
 
 Deterministic Scenario Engine (DSE) creates reproducible, state-consistent
 business histories and deterministic scenario suites with ground truth for
-testing. The source-tree distribution version is 2.2.0. Distribution release
-identity and deterministic compatibility identity are separate:
-`ENGINE_VERSION` remains 1.0.0 and DSL version remains 1. For authoritative
-public-release availability and history, see PyPI and GitHub Releases.
+testing. This source tree is the prepublication distribution 3.0.0 candidate.
+Distribution and execution compatibility identities are separate: public
+`ENGINE_VERSION` is 2.0.0, while the preserved DSL 1 path records Engine 1.0.0.
+This statement does not assert package-index publication; PyPI and GitHub
+Releases remain authoritative for public-release availability and history.
 
 ## Why it exists
 
@@ -21,6 +22,9 @@ make expected behavior explicit.
 ## Core capabilities
 
 - DSL 1 parsing, compilation, and deterministic execution
+- DSL 2 logical-actor execution with an explicit independent schedule seed
+- canonical Result/2, Manifest/2, and Schedule/1 evidence with exact replay
+- actor-aware inspect/explain and deterministic offline trace viewing
 - addressed randomness and logical IDs that do not depend on a shared stream
 - current state plus append-only committed history and artifacts
 - whole-step atomicity
@@ -43,11 +47,9 @@ make expected behavior explicit.
 - canonical evidence bundles, ordered JSON/JSONL export, compatibility reports,
   explicit adapters, closed lossless migrations, and fixture-directory export
 
-Release 2.2.0 adds first-class run → replay artifacts and fail-closed replay
-diagnostics, actionable human and machine-readable errors, author-time
-scaffolding, scenario-definition diff, conservative impact analysis, offline
-trace views, and an installed compatibility-fixture export. See the
-[2.2.0 release notes](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/release-notes-2.2.0.md).
+The 3.0.0 candidate adds Engine 2.0.0 and DSL 2 while preserving Engine 1/DSL 1
+behavior and immutable evidence. See the
+[3.0.0 candidate notes](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/release-notes-3.0.0.md).
 
 Core execution does not require a database, network service, plugin, or property
 testing framework. See [security assumptions and non-goals](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/security-and-non-goals.md).
@@ -114,6 +116,7 @@ self-contained offline HTML file from supported result/evidence.
 
 - [Quickstart](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/quickstart.md)
 - [DSL 1 reference](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/dsl-reference.md)
+- [DSL 2 reference](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/dsl2-reference.md)
 - [Determinism model](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/determinism.md)
 - [Reproducibility and replay](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/reproducibility.md)
 - [Testing, faults, and oracle](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/testing-oracle.md)
@@ -125,13 +128,16 @@ self-contained offline HTML file from supported result/evidence.
 - [Security assumptions and non-goals](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/security-and-non-goals.md)
 - [Compatibility contract](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/compatibility.md)
 - [2.2.0 release notes](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/release-notes-2.2.0.md)
+- [3.0.0 candidate notes](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/release-notes-3.0.0.md)
 - [Phase 2 public contract, CLI, and hard bounds](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/phase2-public-contract.md)
 - [Phase 3 public contract and evidence interchange](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/phase3-public-contract.md)
 
 ## Status
 
 Distribution release identity and deterministic engine compatibility are
-separate contracts. This source tree reports distribution version 2.2.0;
-generated core manifests retain `ENGINE_VERSION` 1.0.0 and DSL 1. PyPI and
-GitHub Releases are the authoritative sources for public-release availability
-and history. The project is licensed under Apache-2.0.
+separate contracts. This prepublication source tree reports distribution
+version 3.0.0 and public Engine 2.0.0. Engine 1 manifests remain exactly 1.0.0
+with integer DSL 1; Engine 2 manifests use 2.0.0 with integer DSL 2. Supported
+Python versions are 3.11–3.14. Suite Run/2 is reader/schema support only; Engine
+2 suite orchestration, cross-major promotion, remote URI input, and implicit
+schedule-seed derivation are unsupported. The project is Apache-2.0 licensed.

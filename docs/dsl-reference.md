@@ -3,6 +3,10 @@
 This reference describes the frozen Scenario Engine DSL 1 grammar and semantics.
 Unknown keys are rejected in every schema-defined mapping.
 
+DSL 1 remains bound to Engine 1.0.0, Result/1, Manifest/1, and Suite Run/1 in
+distribution 3.0.0. Public Engine 2.0.0 does not promote or reinterpret DSL 1.
+See [DSL 2](dsl2-reference.md) for logical actors.
+
 ## Root document
 
 Required root keys are:

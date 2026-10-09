@@ -12,7 +12,7 @@ import pytest
 
 import scenario_engine
 from scenario_engine import ENGINE_VERSION, compile_document, parse_yaml, replay_scenario, run_scenario
-from scenario_engine._version import VERSION
+from scenario_engine._version import ENGINE1_VERSION, VERSION
 from scenario_engine.diff import semantic_diff
 from scenario_engine.inspection import inspect_result
 from scenario_engine.manifest import ReplayCompatibilityError
@@ -59,8 +59,9 @@ def _cases():
 def test_version_roles_are_explicit_and_dsl_remains_one() -> None:
     config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert config["tool"]["setuptools"]["dynamic"]["version"]["attr"] == "scenario_engine._version.VERSION"
-    assert VERSION == "2.2.0"
-    assert ENGINE_VERSION == scenario_engine.ENGINE_VERSION == "1.0.0"
+    assert VERSION == "3.0.0"
+    assert ENGINE_VERSION == scenario_engine.ENGINE_VERSION == "2.0.0"
+    assert ENGINE1_VERSION == "1.0.0"
     _, result = _result("cart.yaml", "s")
     assert result.manifest.engine_version == "1.0.0"
     assert result.manifest.dsl_version == 1

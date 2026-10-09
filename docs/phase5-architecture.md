@@ -1,5 +1,11 @@
 # Phase 5.0 Step-Atomic Deterministic Logical Concurrency Architecture Freeze
 
+> Phase 5.12B-1 promotion amendment: the source distribution coordinate is now
+> the prepublication 3.0.0 candidate and public `ENGINE_VERSION` is 2.0.0.
+> `ENGINE1_VERSION` remains exactly 1.0.0 for DSL 1 execution, Result/1,
+> Manifest/1, Suite Run/1, and replay. No schema number, frozen serializer,
+> scheduler, hash, RNG/ID algorithm, or canonical byte contract changes.
+
 ## 1. Status and authority
 
 This document freezes the approved Phase 5 product direction: **Step-Atomic

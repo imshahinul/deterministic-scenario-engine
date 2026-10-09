@@ -1,6 +1,7 @@
 """Deliberately small supported Python API for Deterministic Scenario Engine."""
 
 from .address import ExecutionAddress
+from ._version import ENGINE_VERSION
 from .canonical import (
     canonical_scenario_bytes, canonical_scenario_hash, canonical_scenario_payload,
 )
@@ -15,9 +16,7 @@ from .expressions import ExpressionEvaluationError
 from .faults import FaultError
 from .ids import LogicalID
 from .invariants import InvariantError
-from .manifest import (
-    ENGINE_VERSION, ReplayCompatibilityError, ReproducibilityManifest,
-)
+from .manifest import ReplayCompatibilityError, ReproducibilityManifest
 from .oracle import OracleError
 from .plugins import (
     GeneratorPlugin, PluginError, PluginGenerationContext, PluginRegistry,

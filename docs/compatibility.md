@@ -1,13 +1,28 @@
-# Scenario Engine 1.0 compatibility contract
+# Scenario Engine 3.0 compatibility contract
 
 This document is normative for the frozen DSL, deterministic result, manifest,
 and plugin contracts. Distribution metadata remains a packaging concern.
 
 ## Version roles
 
-`ENGINE_VERSION` is the engine compatibility/replay contract version recorded
-in every `ReproducibilityManifest`. For the 1.0 release candidate it is 1.0.0
-and intentionally equals the distribution version.
+Distribution `VERSION` is 3.0.0 and public `ENGINE_VERSION` is 2.0.0. The
+historical Engine 1 coordinate is independently fixed at 1.0.0: every
+`scenario.manifest/1` produced by DSL 1 continues to record 1.0.0. Engine 2
+Manifest/2 records 2.0.0. Package version is never inferred as an execution
+coordinate.
+
+## Canonical compatibility matrix
+
+| DSL | Engine | Execution/replay |
+| --- | --- | --- |
+| integer `1` | `1.0.0` | supported: Result/1, Manifest/1, Suite Run/1 |
+| integer `2` | `2.0.0` | supported: Result/2, Manifest/2, Schedule/1 |
+| integer `1` | `2.0.0` | unsupported cross-major |
+| integer `2` | `1.0.0` | unsupported cross-major |
+
+Unknown, mixed-major, missing, and incomplete tuples fail closed. Reading does
+not silently migrate evidence. Suite Run/2 support is schema/reader-only and
+does not provide Engine 2 suite orchestration.
 
 Engine SemVer has these meanings:
 
@@ -75,8 +90,8 @@ default and reader rules; unknown data is not silently treated as compatible.
 Exact replay requires a compatible recorded engine contract, DSL version,
 RNG/ID and generator/plugin algorithm versions, canonical scenario hash,
 input/resource hashes, root seed, run index, locale, reference clock, and other
-explicit execution context. The current engine requires exact `ENGINE_VERSION`
-and exact compatibility-tuple matches. Unsupported cross-version replay fails
+explicit execution context. Each engine requires its exact immutable execution
+coordinate and compatibility-tuple match. Unsupported cross-version replay fails
 explicitly; indefinite replay across incompatible future major versions is not
 promised.
 

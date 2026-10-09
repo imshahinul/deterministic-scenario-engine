@@ -14,7 +14,7 @@ from scenario_engine.batch import (
     DEFAULT_RETAINED_RESULT_BYTES, BatchError, BatchPlan, ExecutionMode,
     RunRequest, execute_batch,
 )
-from scenario_engine._version import ENGINE_VERSION
+from scenario_engine._version import ENGINE1_VERSION
 from scenario_engine.canonical import canonical_scenario_hash
 from scenario_engine.composition import (
     ComposedSuite, CompositionBoundError, CompositionError,
@@ -766,7 +766,7 @@ def _replay(args: argparse.Namespace) -> tuple[bytes, bytes]:
         if historical_result is not None:
             recorded_version = historical_result.payload["manifest"]["engine_version"]
             raise UnsupportedReplayContractError(
-                recorded_version, (f"scenario-engine/{ENGINE_VERSION}",),
+                recorded_version, (f"scenario-engine/{ENGINE1_VERSION}",),
             )
         read = read_v1_manifest_bytes(artifact)
         read.require_execution_replay()
@@ -897,7 +897,7 @@ def _require_replay_compatibility(envelope: RunManifestEnvelope, scenario: str) 
             migration=ReplayCompatibilityReason.MIGRATION_UNAVAILABLE,
             missing=("child_manifest",),
         )
-    expected_contract = f"scenario-engine/{ENGINE_VERSION}"
+    expected_contract = f"scenario-engine/{ENGINE1_VERSION}"
     if envelope.compatibility.execution_contract != expected_contract:
         raise ReplayCompatibilityError(
             "execution_contract mismatch",

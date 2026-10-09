@@ -8,6 +8,11 @@ exports.
 
 ## Constants and value objects
 
+- `scenario_engine.ENGINE_VERSION` — public current Engine coordinate, `2.0.0`.
+- `scenario_engine._version.VERSION` — distribution coordinate, `3.0.0`.
+- `scenario_engine._version.ENGINE1_VERSION` — explicit historical Engine 1
+  execution coordinate, `1.0.0`; not added to the frozen package-root exports.
+
 - `ENGINE_VERSION` — engine compatibility version recorded in manifests; for
   current manifests it remains 1.0.0 independently of distribution version.
 - `MISSING` — singleton semantic missing value, distinct from null.
@@ -79,6 +84,12 @@ executes every recorded scheduler choice, verifies all coordinates and final
 observations, and returns the verified immutable Result/2. It never reconstructs
 missing schedule evidence. Compatibility classification is explicit and does not
 execute, migrate, or promote evidence. Existing Engine 1 functions are unchanged.
+
+`schedule_seed` is a required independent unsigned 64-bit coordinate. It is not
+derived from `root_seed`. Engine 2 writes Result/2, Manifest/2, and Schedule/1;
+exact replay requires the matching result, schedule, scenario, and explicit
+inputs. Actor-aware analysis is exposed through the existing inspection,
+explanation, impact, and offline `scenario_engine.trace_view` surfaces.
 
 The immutable Engine 2 evidence access names are also public from their explicit
 modules: `Engine2Manifest`, `Engine2Result`, `ScheduleReference`,

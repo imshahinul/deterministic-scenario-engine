@@ -9,8 +9,9 @@ from scenario_engine.canonical import canonical_scenario_hash
 from scenario_engine.dsl import compile_document, parse_yaml, replay_scenario, run_scenario
 from scenario_engine.ids import ID_VERSION
 from scenario_engine.manifest import (
-    ENGINE_VERSION, GENERATOR_VERSIONS, ReplayCompatibilityError,
+    GENERATOR_VERSIONS, ReplayCompatibilityError,
 )
+from scenario_engine._version import ENGINE1_VERSION
 from scenario_engine.rng import RNG_VERSION
 
 
@@ -86,7 +87,7 @@ class ReproducibleResultTests(unittest.TestCase):
 
     def test_manifest_uses_explicit_engine_and_algorithm_versions(self):
         manifest = run_scenario(compiled(), "seed").manifest
-        self.assertEqual(ENGINE_VERSION, "1.0.0")
+        self.assertEqual(ENGINE1_VERSION, "1.0.0")
         self.assertEqual(manifest.rng_algorithm_version, RNG_VERSION)
         self.assertEqual(manifest.id_algorithm_version, ID_VERSION)
         self.assertEqual(dict(manifest.generator_versions), dict(GENERATOR_VERSIONS))

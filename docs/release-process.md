@@ -21,6 +21,15 @@ Before building artifacts:
 Release-candidate evidence may record that publication, a tag, or a release is
 absent. Package long-description material may not encode those transient facts.
 
+For the 3.0.0 candidate, qualify two independent fixed-`SOURCE_DATE_EPOCH`
+builds from external `git archive` trees. Require byte-identical wheels and
+sdists; verify metadata version 3.0.0, public Engine 2.0.0, historical Engine 1
+1.0.0 evidence, licenses, dependencies, packaged release notes and DSL 2
+reference, fixture inventories, and absence of secrets/host paths. Installed
+consumers from wheel and sdist must pass on Python 3.11, 3.12, 3.13, and 3.14.
+Retain the exact qualified bytes and SHA-256 identities; any source change
+invalidates qualification.
+
 ## Pre-upload
 
 Immediately before `twine upload`, rerun the source README neutrality test and
@@ -34,6 +43,13 @@ absolute documentation target to record `PYPI_LINK_TARGET_CHECK=PASS`.
 
 Publish the exact accepted artifacts. Do not rebuild between acceptance and
 publication.
+
+Publication requires separate owner authorization. Before upload, confirm the
+exact retained hashes, authentication configuration without exposing values,
+absence of an existing release, and `twine check`. After upload, independently
+compare PyPI hashes, install from the index, rerun smoke workflows, then create
+only the separately authorized tag and GitHub Release. Candidate qualification
+alone never authorizes authentication attempts, upload, tagging, or a release.
 
 ## Post-publication completion gate
 

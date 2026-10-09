@@ -11,11 +11,14 @@ from typing import Any, Mapping
 from .errors import ScenarioEngineError
 from .ids import ID_VERSION
 from .rng import RNG_VERSION
-from ._version import ENGINE_VERSION
+from ._version import ENGINE1_VERSION
 from .values import normalize
 
 
 GENERATOR_VERSIONS = MappingProxyType({"int": RNG_VERSION, "logical_id": ID_VERSION})
+# Historical module-level compatibility coordinate. Public current-engine identity
+# is exported from scenario_engine._version and the package root.
+ENGINE_VERSION = ENGINE1_VERSION
 
 
 class ReplayCompatibilityReason(str, Enum):

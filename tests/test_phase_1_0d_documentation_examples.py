@@ -125,11 +125,11 @@ class Phase10DDocumentationExampleTests(unittest.TestCase):
         self.assertIn("does not send http requests", schemathesis)
         self.assertIn("does not call the case", schemathesis)
 
-    def test_normative_compatibility_contract_remains_unchanged(self):
+    def test_normative_compatibility_contract_matches_version_promotion(self):
         expected = text(ROOT / "docs/compatibility.md")
         self.assertEqual(
             sha256(expected.encode()).hexdigest(),
-            "2db31aeed53a7f6acc336801afc24bcf1201b203491d84b81e9a5fcca30070a1",
+            "711b6d109fbd8a27c8fb3b84879530c066373f7eeadaa2f5f830b5237af84170",
         )
 
 

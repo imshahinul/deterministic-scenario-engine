@@ -2,11 +2,12 @@ from __future__ import annotations
 from types import MappingProxyType
 
 from scenario_engine.address import ExecutionAddress
+from scenario_engine._version import ENGINE1_VERSION
 from scenario_engine.canonical import canonical_scenario_hash
 from scenario_engine.clock import LogicalClock
 from scenario_engine.ids import ID_VERSION
 from scenario_engine.manifest import (
-    ENGINE_VERSION, GENERATOR_VERSIONS, ReplayCompatibilityError,
+    GENERATOR_VERSIONS, ReplayCompatibilityError,
     ReplayCompatibilityReason, ReproducibilityManifest,
 )
 from scenario_engine.result import ScenarioResult
@@ -75,7 +76,7 @@ def _generator_versions(document):
 
 def _manifest(scenario, root_seed, run_index, locale, base_resources):
     return ReproducibilityManifest(root_seed=root_seed, scenario_canonical_hash=canonical_scenario_hash(scenario),
-        engine_version=ENGINE_VERSION, dsl_version=scenario.document.dsl_version,
+        engine_version=ENGINE1_VERSION, dsl_version=scenario.document.dsl_version,
         generator_versions=_generator_versions(scenario.document), rng_algorithm_version=RNG_VERSION,
         id_algorithm_version=ID_VERSION, locale=locale,
         reference_clock_start=scenario.reference_clock_start, run_index=run_index,
@@ -212,7 +213,7 @@ def replay_scenario(yaml_text,manifest,*,inputs=None,plugins=None):
     document=parse_yaml(yaml_text); scenario=compile_document(document)
     base=resolve_resources(document.resources,inputs)
     registry=_registry(plugins); _prevalidate_plugins(document,registry)
-    expected={"scenario_canonical_hash":canonical_scenario_hash(scenario),"engine_version":ENGINE_VERSION,"dsl_version":document.dsl_version,
+    expected={"scenario_canonical_hash":canonical_scenario_hash(scenario),"engine_version":ENGINE1_VERSION,"dsl_version":document.dsl_version,
         "rng_algorithm_version":RNG_VERSION,"id_algorithm_version":ID_VERSION,"generator_versions":_generator_versions(document),"reference_clock_start":document.reference_clock_start}
     for field,current in expected.items():
         recorded=getattr(manifest,field)
