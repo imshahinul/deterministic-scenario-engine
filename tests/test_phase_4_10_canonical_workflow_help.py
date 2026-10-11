@@ -65,6 +65,17 @@ def test_top_level_and_phase4_command_help_are_coherent() -> None:
         assert all(phrase in result.stdout for phrase in phrases)
 
 
+def test_replay_help_identifies_engine1_and_engine2_evidence() -> None:
+    result = invoke("replay", "--help")
+    assert result.returncode == 0
+    help_text = " ".join(result.stdout.decode("utf-8").split())
+    for phrase in (
+        "suite.run/1", "scenario.result/2", "- for stdin", "--scenario", "--inputs",
+        "--schedule", "scenario.result/2 replay requires scenario.schedule/1 via --schedule",
+    ):
+        assert phrase in help_text
+
+
 def test_public_docs_have_no_checkpoint_or_checkout_dependency() -> None:
     docs = (ROOT / "README.md").read_text() + QUICKSTART.read_text()
     forbidden = (

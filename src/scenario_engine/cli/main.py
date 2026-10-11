@@ -220,7 +220,11 @@ def _parser() -> argparse.ArgumentParser:
             "Missing required replay data fails closed with exit 5."
         ),
     )
-    replay.add_argument("source", help="local suite.run/1 replay artifact path or - for stdin")
+    replay.add_argument(
+        "source",
+        help=("local suite.run/1 or scenario.result/2 artifact path (or - for stdin); "
+              "scenario.result/2 replay requires scenario.schedule/1 via --schedule"),
+    )
     replay.add_argument("--scenario", required=True, help="explicit local scenario YAML path")
     replay.add_argument(
         "--inputs",
