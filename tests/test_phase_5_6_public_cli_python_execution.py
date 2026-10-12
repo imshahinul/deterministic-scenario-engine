@@ -101,6 +101,39 @@ def test_missing_coordinates_tampering_remote_and_output_rollback(tmp_path: Path
     assert failed.returncode == 7 and not first.exists() and existing.read_bytes() == b"occupied"
 
 
+def test_missing_schedule_human_diagnostic_and_json_bytes(tmp_path: Path) -> None:
+    source = tmp_path / "scenario.yaml"; source.write_text(SCENARIO, encoding="utf-8")
+    schedule = tmp_path / "schedule.json"; result = tmp_path / "result.json"
+    generated = invoke(
+        "--json", "run", str(source), "--seed", "generation", "--schedule-seed", "7",
+        "--schedule-out", str(schedule), "--result-out", str(result),
+    )
+    assert generated.returncode == 0
+
+    missing = invoke("replay", str(result), "--scenario", str(source))
+    assert missing.returncode == 5
+    assert missing.stdout == b""
+    assert b"SCHEDULE_EVIDENCE_REQUIRED" in missing.stderr
+    assert b"REPLAY_COMPATIBILITY" in missing.stderr
+    assert b"scenario.result/2 replay requires --schedule" in missing.stderr
+    assert b"SUPPLY_EXACT_SCHEDULE_EVIDENCE" in missing.stderr
+    assert b"Traceback" not in missing.stderr
+    assert str(source).encode() not in missing.stderr
+    assert str(result).encode() not in missing.stderr
+    assert b"super-secret-token" not in missing.stderr
+    assert len(missing.stderr) <= 512
+
+    machine = invoke("--json", "replay", str(result), "--scenario", str(source))
+    expected = (
+        b'{"category":"REPLAY_COMPATIBILITY","code":"SCHEDULE_EVIDENCE_REQUIRED",'
+        b'"exit_code":5,"message":"scenario.result/2 replay requires --schedule",'
+        b'"remediation":"SUPPLY_EXACT_SCHEDULE_EVIDENCE","schema":"scenario.error/1"}\n'
+    )
+    assert machine.returncode == 5
+    assert machine.stdout == b""
+    assert machine.stderr == expected
+
+
 def test_invalid_secret_like_schedule_seed_is_redacted(tmp_path: Path) -> None:
     source = tmp_path / "scenario.yaml"; source.write_text(SCENARIO, encoding="utf-8")
     secret = "super-secret-token"

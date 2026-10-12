@@ -1439,6 +1439,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             if json_mode:
                 _emit_machine(diagnostic, error.code)
+            elif error.diagnostic_code == "SCHEDULE_EVIDENCE_REQUIRED":
+                sys.stderr.write(render_human_diagnostic(diagnostic))
             else:
                 _diagnostic(str(error))
         return int(error.code)
