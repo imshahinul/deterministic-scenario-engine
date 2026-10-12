@@ -1294,6 +1294,29 @@ def _render_replay_human(diagnostic: HumanDiagnostic) -> None:
     _diagnostic("; ".join(fields))
 
 
+_SAFE_ENGINE2_EVIDENCE_FIELDS = frozenset({
+    "actors", "artifacts", "classification", "contract", "dsl_version", "engine_version",
+    "evidence", "execution", "execution.dsl_version", "execution.engine_version",
+    "execution.generator_versions", "execution.id_algorithm_version", "execution.locale",
+    "execution.reference_clock_start", "execution.rng_algorithm_version", "execution.root_seed",
+    "failure", "final_logical_clock", "final_state", "generator_versions", "history",
+    "input_resource_hashes", "json", "manifest", "manifest_hash", "members", "outcome",
+    "outcome.schedule", "records", "records.outcome", "records.ready_actors",
+    "records.selected_actor", "reference_clock_start", "result", "result_hash", "root_seed",
+    "run_index", "scenario_hash", "scenario_id", "schedule", "schedule_hash",
+    "schedule_reference", "schedule_reference.contract", "schedule_reference.scenario_hash",
+    "schedule_reference.schedule_hash", "schedule_seed", "scheduler_contract", "semantic value",
+    "suite", "suite_hash", "terminal", "terminal.classification", "terminal.failure",
+})
+
+
+def _render_engine2_evidence_human(diagnostic: HumanDiagnostic, field: str) -> None:
+    """Render one source-defined field identifier without reflecting supplied values."""
+    sys.stderr.write(render_human_diagnostic(diagnostic))
+    if field in _SAFE_ENGINE2_EVIDENCE_FIELDS:
+        sys.stderr.write(f"field:\n{field}\n")
+
+
 def _path_reason(error: Exception) -> PathReason | None:
     """Classify existing path-security failures without replacing their checks."""
     if isinstance(error, _CLIError):
@@ -1495,7 +1518,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             if json_mode:
                 _emit_machine(diagnostic, code)
             else:
-                sys.stderr.write(render_human_diagnostic(diagnostic))
+                _render_engine2_evidence_human(diagnostic, error.field)
             return int(code)
         if code is CLIExitCode.INTERNAL:
             message = "unexpected internal error"

@@ -12,6 +12,8 @@ from scenario_engine.engine2 import (
     validate_engine2,
 )
 from scenario_engine.schedule import canonical_schedule_bytes
+from scenario_engine.cli.main import _render_engine2_evidence_human
+from scenario_engine.diagnostics import HumanDiagnostic
 
 
 ROOT = Path(__file__).parents[1]
@@ -40,6 +42,21 @@ def invoke(*arguments: str) -> subprocess.CompletedProcess[bytes]:
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
         env={"PYTHONPATH": str(ROOT / "src")},
     )
+
+
+def test_engine2_human_field_renderer_omits_unapproved_identifiers(capsys) -> None:
+    diagnostic = HumanDiagnostic(
+        "SCHEDULE_INVALID", "ENGINE2_EVIDENCE", "Engine 2 evidence was rejected",
+        remediation="SUPPLY_COMPLETE_UNMODIFIED_ENGINE2_EVIDENCE",
+    )
+    _render_engine2_evidence_human(diagnostic, "schedule_hash")
+    safe = capsys.readouterr().err
+    assert safe.count("field:\n") == 1 and safe.endswith("field:\nschedule_hash\n")
+
+    _render_engine2_evidence_human(diagnostic, "secret\n/tmp/private=value")
+    unsafe = capsys.readouterr().err
+    assert "field:" not in unsafe
+    assert "secret" not in unsafe and "/tmp/private" not in unsafe and "value" not in unsafe
 
 
 def test_public_python_execute_replay_and_compatibility() -> None:
@@ -91,7 +108,22 @@ def test_missing_coordinates_tampering_remote_and_output_rollback(tmp_path: Path
     corrupted = tmp_path / "corrupted.json"
     corrupted.write_text(json.dumps(raw, sort_keys=True, separators=(",", ":")), encoding="utf-8")
     rejected = invoke("--json", "replay", str(result), "--scenario", str(source), "--schedule", str(corrupted))
-    assert rejected.returncode in (3, 5) and b"Traceback" not in rejected.stderr
+    expected = (
+        b'{"category":"ENGINE2_EVIDENCE","code":"SCHEDULE_INVALID",'
+        b'"details":{"field":"schedule_hash"},"exit_code":3,'
+        b'"message":"Engine 2 evidence was rejected",'
+        b'"remediation":"SUPPLY_COMPLETE_UNMODIFIED_ENGINE2_EVIDENCE",'
+        b'"schema":"scenario.error/1"}\n'
+    )
+    assert rejected.returncode == 3 and rejected.stdout == b"" and rejected.stderr == expected
+    human = invoke("replay", str(result), "--scenario", str(source), "--schedule", str(corrupted))
+    assert human.returncode == 3 and human.stdout == b""
+    assert human.stderr.count(b"field:\n") == 1
+    assert b"field:\nschedule_hash\n" in human.stderr
+    assert b"Traceback" not in human.stderr
+    assert str(source).encode() not in human.stderr and str(corrupted).encode() not in human.stderr
+    assert b"scenario:/actor/writer" not in human.stderr and b"super-secret-token" not in human.stderr
+    assert len(human.stderr) <= 256
     remote = invoke("--json", "run", str(source), "--seed", "generation", "--schedule-seed", "7",
                     "--schedule-out", "https://example.invalid/schedule.json")
     assert remote.returncode == 6 and json.loads(remote.stderr)["code"] == "PATH_REMOTE_FORBIDDEN"
