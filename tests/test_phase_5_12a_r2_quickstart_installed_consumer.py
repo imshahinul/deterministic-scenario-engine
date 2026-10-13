@@ -3,11 +3,14 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
+README = ROOT / "README.md"
+QUICKSTART = ROOT / "docs/quickstart.md"
 DSL1 = """dsl_version: 1
 scenario: dse_demo
 clock: {start: '2026-01-01T00:00:00Z'}
@@ -36,6 +39,38 @@ actors:
         write: {observed: {$state: count}}
         transition: null
 """
+
+
+def test_documented_installed_identity_command_from_neutral_directory(tmp_path: Path) -> None:
+    readme = README.read_text(encoding="utf-8")
+    quickstart = QUICKSTART.read_text(encoding="utf-8")
+    prefix = "python3 -c 'from importlib.metadata import version;"
+    readme_commands = [line for line in readme.splitlines() if line.startswith(prefix)]
+    quickstart_commands = [line for line in quickstart.splitlines() if line.startswith(prefix)]
+    assert len(readme_commands) == 1
+    assert quickstart_commands == readme_commands
+
+    command = shlex.split(readme_commands[0])
+    assert command[:2] == ["python3", "-c"]
+    source = command[2]
+    assert 'version("deterministic-scenario-engine")' in source
+    assert "scenario_engine.__file__" in source
+    assert 'Path(scenario_engine.__file__).resolve()' in source
+    assert "scenario --version" not in readme + quickstart
+
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    completed = subprocess.run(
+        [str(Path(sys.executable).absolute()), *command[1:]], cwd=tmp_path, env=env,
+        capture_output=True, text=True, check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stderr == ""
+    lines = completed.stdout.splitlines()
+    assert lines[0] == "DSE distribution: 3.0.0"
+    assert lines[1].startswith("Imported module: ")
+    imported = Path(lines[1].removeprefix("Imported module: "))
+    assert imported.is_relative_to((ROOT / "src/scenario_engine").resolve())
 
 
 def test_complete_quickstart_from_fresh_installed_wheel(tmp_path: Path) -> None:

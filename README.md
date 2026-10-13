@@ -71,6 +71,18 @@ python3 -m pip install deterministic-scenario-engine
 scenario --help
 ```
 
+Verify that the same active Python interpreter sees the expected distribution
+and observe the module location it actually imports:
+
+```console
+python3 -c 'from importlib.metadata import version; from pathlib import Path; import scenario_engine; print("DSE distribution:", version("deterministic-scenario-engine")); print("Imported module:", Path(scenario_engine.__file__).resolve())'
+```
+
+For this baseline the distribution is `3.0.0`; an editable install of this
+checkout resolves the module under its `src/scenario_engine` directory. The DSE
+distribution version is distinct from Engine 1 (`1.0.0`) and Engine 2 (`2.0.0`)
+compatibility versions.
+
 Install only the named optional integrations you need:
 
 ```console

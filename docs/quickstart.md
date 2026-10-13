@@ -16,6 +16,7 @@ example, a symlinked temporary-directory prefix) at filesystem trust boundaries.
 
 ```console
 python3 -m pip install deterministic-scenario-engine
+python3 -c 'from importlib.metadata import version; from pathlib import Path; import scenario_engine; print("DSE distribution:", version("deterministic-scenario-engine")); print("Imported module:", Path(scenario_engine.__file__).resolve())'
 export DSE_DEMO="$(cd "${TMPDIR:-/tmp}" && pwd -P)/dse-demo"
 rm -rf "$DSE_DEMO"
 mkdir -p "$DSE_DEMO"
@@ -36,6 +37,11 @@ cp "$DSE_DEMO/scenario.yaml" "$DSE_DEMO/scenario-before.yaml"
 sed 's/{$literal: 1}/{$literal: 2}/' "$DSE_DEMO/scenario.yaml" > "$DSE_DEMO/scenario-after.yaml"
 scenario --help
 ```
+
+The identity check uses the same active Python interpreter as installation. It
+should report DSE distribution `3.0.0`; the resolved module path shows the code
+Python actually imports. This distribution version is distinct from Engine 1
+(`1.0.0`) and Engine 2 (`2.0.0`) compatibility versions.
 
 Installing a checkout with `python3 -m pip install .` is
 **source-development-only**. Installed-package workflows are primary.
