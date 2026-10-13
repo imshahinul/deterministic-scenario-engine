@@ -13,8 +13,9 @@ exports.
 - `scenario_engine._version.ENGINE1_VERSION` — explicit historical Engine 1
   execution coordinate, `1.0.0`; not added to the frozen package-root exports.
 
-- `ENGINE_VERSION` — engine compatibility version recorded in manifests; for
-  current manifests it remains 1.0.0 independently of distribution version.
+- `ENGINE_VERSION` — engine compatibility version recorded in manifests:
+  Engine 1 Manifest/1 records 1.0.0, while Engine 2 Manifest/2 records 2.0.0;
+  both are independent of the distribution version.
 - `MISSING` — singleton semantic missing value, distinct from null.
 - `LogicalID(value: str)` — deterministic logical identifier value; users
   normally receive it from `$id` generation.
