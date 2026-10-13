@@ -78,8 +78,8 @@ and observe the module location it actually imports:
 python3 -c 'from importlib.metadata import version; from pathlib import Path; import scenario_engine; print("DSE distribution:", version("deterministic-scenario-engine")); print("Imported module:", Path(scenario_engine.__file__).resolve())'
 ```
 
-For this baseline the distribution is `3.0.0`; an editable install of this
-checkout resolves the module under its `src/scenario_engine` directory. The DSE
+For this release the distribution is `3.0.1`; a source-development editable
+install resolves the module under its `src/scenario_engine` directory. The DSE
 distribution version is distinct from Engine 1 (`1.0.0`) and Engine 2 (`2.0.0`)
 compatibility versions.
 
@@ -143,6 +143,7 @@ self-contained offline HTML file from supported result/evidence.
 - [Compatibility contract](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/compatibility.md)
 - [2.2.0 release notes](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/release-notes-2.2.0.md)
 - [3.0.0 release notes](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/release-notes-3.0.0.md)
+- [3.0.1 release notes](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/release-notes-3.0.1.md)
 - [Phase 2 public contract, CLI, and hard bounds](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/phase2-public-contract.md)
 - [Phase 3 public contract and evidence interchange](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/phase3-public-contract.md)
 
@@ -150,7 +151,7 @@ self-contained offline HTML file from supported result/evidence.
 
 Distribution release identity and deterministic engine compatibility are
 separate contracts. This source tree reports published distribution version
-3.0.0 and public Engine 2.0.0. Engine 1 manifests remain exactly 1.0.0
+3.0.1 and public Engine 2.0.0. Engine 1 manifests remain exactly 1.0.0
 with integer DSL 1; Engine 2 manifests use 2.0.0 with integer DSL 2. Supported
 Python versions are 3.11–3.14. Suite Run/2 is reader/schema support only; Engine
 2 suite orchestration, cross-major promotion, remote URI input, and implicit

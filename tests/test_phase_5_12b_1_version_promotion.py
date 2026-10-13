@@ -32,7 +32,7 @@ PACK1_INDEX_SHA256 = "4909bc5876bcf9add8f8444f7dcfb4b07153b9afea489226f30db86460
 
 
 def test_t01_t06_version_roles_are_separate_and_exact() -> None:
-    assert VERSION == "3.0.0"
+    assert VERSION == "3.0.1"
     assert scenario_engine.ENGINE_VERSION == ENGINE_VERSION == ENGINE2_EXECUTION_VERSION == "2.0.0"
     assert ENGINE1_VERSION == "1.0.0"
     result1 = run_scenario(compile_document(parse_yaml(DSL1)), "s")
@@ -101,7 +101,17 @@ def test_t22_installed_distribution_metadata_matches_source() -> None:
     assert distribution_version("deterministic-scenario-engine") == VERSION
 
 
-def test_t25_t26_historical_tag_unchanged_and_no_release_tag() -> None:
+def test_t25_t26_historical_release_tags_are_unchanged() -> None:
     old = subprocess.check_output(["git", "rev-parse", "refs/tags/2.2.0^{commit}"], cwd=ROOT, text=True).strip()
     assert old == "aaa0495239df9db093c5e42d817a9d449e5ea055"
-    assert subprocess.run(["git", "show-ref", "--verify", "--quiet", "refs/tags/3.0.0"], cwd=ROOT).returncode != 0
+    release_tag = subprocess.check_output(
+        ["git", "rev-parse", "refs/tags/3.0.0"], cwd=ROOT, text=True,
+    ).strip()
+    assert release_tag == "7ef7861b79019085b307c4b38e54ef5e912805df"
+    assert subprocess.check_output(
+        ["git", "cat-file", "-t", "refs/tags/3.0.0"], cwd=ROOT, text=True,
+    ).strip() == "tag"
+    release_commit = subprocess.check_output(
+        ["git", "rev-parse", "refs/tags/3.0.0^{commit}"], cwd=ROOT, text=True,
+    ).strip()
+    assert release_commit == "3e351e487b7602c28b6b79196f863006add53774"

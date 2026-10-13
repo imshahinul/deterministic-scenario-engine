@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from hashlib import sha256
 import importlib
+import inspect
 import json
 from pathlib import Path
 import unittest
@@ -100,12 +101,27 @@ class V1ReadTests(unittest.TestCase):
 
     def test_suite_import_has_no_runtime_side_effects(self):
         import scenario_engine.suite as suite
-        with patch("builtins.open", side_effect=AssertionError("file attempted")):
+
+        real_open = open
+
+        def reject_module_file_io(*args, **kwargs):
+            frame = inspect.currentframe().f_back
+            while frame is not None and frame.f_globals.get("__name__") == "unittest.mock":
+                frame = frame.f_back
+            if (
+                frame is not None
+                and frame.f_globals.get("__name__") == "_pytest.assertion.rewrite"
+                and frame.f_code.co_name == "_read_pyc"
+            ):
+                return real_open(*args, **kwargs)
+            raise AssertionError("file attempted")
+
+        with patch("builtins.open", side_effect=reject_module_file_io):
             self.assertIs(importlib.reload(suite), suite)
 
     def test_v1_api_version_and_three_result_goldens_remain_unchanged(self):
         expected = scenario_engine.__all__
-        self.assertEqual(VERSION, "3.0.0")
+        self.assertEqual(VERSION, "3.0.1")
         self.assertEqual(scenario_engine.__all__, expected)
         cart_source = (ROOT / "examples" / "phase0_1b_cart.yaml").read_text()
         cart = run_scenario(compile_document(parse_yaml(cart_source)), "s")

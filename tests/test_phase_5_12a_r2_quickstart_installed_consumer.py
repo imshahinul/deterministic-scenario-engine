@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from importlib.metadata import distribution
 import os
 from pathlib import Path
 import shlex
@@ -11,6 +12,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 QUICKSTART = ROOT / "docs/quickstart.md"
+EXPECTED_DISTRIBUTION_VERSION = "3.0.1"
 DSL1 = """dsl_version: 1
 scenario: dse_demo
 clock: {start: '2026-01-01T00:00:00Z'}
@@ -67,10 +69,13 @@ def test_documented_installed_identity_command_from_neutral_directory(tmp_path: 
     assert completed.returncode == 0, completed.stderr
     assert completed.stderr == ""
     lines = completed.stdout.splitlines()
-    assert lines[0] == "DSE distribution: 3.0.0"
+    assert lines[0] == f"DSE distribution: {EXPECTED_DISTRIBUTION_VERSION}"
     assert lines[1].startswith("Imported module: ")
     imported = Path(lines[1].removeprefix("Imported module: "))
-    assert imported.is_relative_to((ROOT / "src/scenario_engine").resolve())
+    installed_package = Path(
+        distribution("deterministic-scenario-engine").locate_file("scenario_engine"),
+    ).resolve()
+    assert imported.is_relative_to(installed_package)
 
 
 def test_complete_quickstart_from_fresh_installed_wheel(tmp_path: Path) -> None:
@@ -109,10 +114,17 @@ def test_complete_quickstart_from_fresh_installed_wheel(tmp_path: Path) -> None:
         return completed
 
     identity = subprocess.run(
-        [str(python), "-c", "import scenario_engine; print(scenario_engine.__file__)"],
+        [str(python), "-c", (
+            "from importlib.metadata import version; import scenario_engine; "
+            "from scenario_engine._version import VERSION; "
+            "print(version('deterministic-scenario-engine')); print(VERSION); "
+            "print(scenario_engine.__file__)"
+        )],
         cwd=demo, env=clean_env, capture_output=True, text=True, check=True,
     )
-    assert Path(identity.stdout.strip()).is_relative_to(installed_root)
+    installed_version, source_version, imported_path = identity.stdout.splitlines()
+    assert installed_version == source_version == EXPECTED_DISTRIBUTION_VERSION
+    assert Path(imported_path).is_relative_to(installed_root)
     run("--help")
 
     # Existing documented DSL 1 journey.

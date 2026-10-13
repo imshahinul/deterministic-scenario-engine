@@ -1,7 +1,6 @@
 # Canonical installed-package workflows
 
-**3.0.0 release documentation.** These commands apply to the package published
-on [PyPI](https://pypi.org/project/deterministic-scenario-engine/3.0.0/).
+**3.0.1 release documentation.** These commands apply to distribution 3.0.1.
 
 This is the canonical DSE user workflow document. Every ordinary command below
 uses the installed package and portable files created here; no source checkout,
@@ -39,7 +38,7 @@ scenario --help
 ```
 
 The identity check uses the same active Python interpreter as installation. It
-should report DSE distribution `3.0.0`; the resolved module path shows the code
+should report DSE distribution `3.0.1`; the resolved module path shows the code
 Python actually imports. This distribution version is distinct from Engine 1
 (`1.0.0`) and Engine 2 (`2.0.0`) compatibility versions.
 

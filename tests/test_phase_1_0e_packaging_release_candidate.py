@@ -54,7 +54,7 @@ class Phase10EPackagingReleaseCandidateTests(unittest.TestCase):
             "scenario_engine._version.VERSION",
         )
         # Phase 2 changes package identity, not the frozen deterministic contract.
-        self.assertEqual(VERSION, "3.0.0")
+        self.assertEqual(VERSION, "3.0.1")
         self.assertEqual(ENGINE_VERSION, "2.0.0")
 
     def test_license_readme_and_build_backend_metadata(self):
