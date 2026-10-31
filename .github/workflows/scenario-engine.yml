@@ -19,12 +19,16 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Use Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install package and all test extras
-        run: python -m pip install -e '.[pytest,sqlalchemy,hypothesis,schemathesis]'
+        run: |
+          python -m pip install 'setuptools>=77'
+          python -m pip install '.[pytest,sqlalchemy,hypothesis,schemathesis]'
       - name: Run the complete pytest suite
         run: python -m pytest -q
 
