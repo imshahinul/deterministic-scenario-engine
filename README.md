@@ -80,8 +80,8 @@ and observe the module location it actually imports:
 python3 -c 'from importlib.metadata import version; from pathlib import Path; import scenario_engine; print("DSE distribution:", version("deterministic-scenario-engine")); print("Imported module:", Path(scenario_engine.__file__).resolve())'
 ```
 
-This release-candidate source tree has distribution coordinate `3.1.0`; this is
-not a claim that 3.1.0 is published or available from PyPI. A source-development
+The source distribution version is `3.1.0`. PyPI and GitHub Releases are
+authoritative for actual publication and release history. A source-development
 editable install resolves the module under its `src/scenario_engine` directory.
 The DSE distribution version is distinct from Engine 1 (`1.0.0`) and Engine 2
 (`2.0.0`) compatibility versions.
@@ -147,7 +147,7 @@ self-contained offline HTML file from supported result/evidence.
 - [2.2.0 release notes](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/release-notes-2.2.0.md)
 - [3.0.0 release notes](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/release-notes-3.0.0.md)
 - [3.0.1 release notes](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/release-notes-3.0.1.md)
-- [3.1.0 candidate release notes](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/release-notes-3.1.0.md)
+- [3.1.0 release notes](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/release-notes-3.1.0.md)
 - [Engine 2 serial suites](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/engine2-suite.md)
 - [Engine 2 schedule-seed exploration](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/engine2-exploration.md)
 - [Phase 2 public contract, CLI, and hard bounds](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/phase2-public-contract.md)
@@ -156,12 +156,13 @@ self-contained offline HTML file from supported result/evidence.
 ## Status
 
 Distribution release identity and deterministic engine compatibility are
-separate contracts. This source tree reports unpublished candidate distribution
-version 3.1.0 and public Engine 2.0.0. Engine 1 manifests remain exactly 1.0.0
-with integer DSL 1; Engine 2 manifests use 2.0.0 with integer DSL 2. Supported
-Python versions are 3.11–3.14. Module-qualified Engine 2 APIs provide ordered
-serial suite execution, strict aggregate verification, exact native replay, and
-finite explicit schedule-seed sweeps. These additive contracts do not produce or
+separate contracts. This source tree reports distribution version 3.1.0 and
+public Engine 2.0.0. PyPI and GitHub Releases are authoritative for actual
+publication and release history. Engine 1 manifests remain exactly 1.0.0 with
+integer DSL 1; Engine 2 manifests use 2.0.0 with integer DSL 2. Supported Python
+versions are 3.11–3.14. Module-qualified Engine 2 APIs provide ordered serial
+suite execution, strict aggregate verification, exact native replay, and finite
+explicit schedule-seed sweeps. These additive contracts do not produce or
 reinterpret historical Suite Run/2. Exhaustive exploration, distributed or
 parallel execution, cross-major promotion, remote URI input, and implicit
 schedule-seed derivation remain unsupported. The project is Apache-2.0 licensed.

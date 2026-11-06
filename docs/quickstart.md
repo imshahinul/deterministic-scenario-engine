@@ -1,9 +1,9 @@
 # Canonical installed-package workflows
 
-**3.1.0 release-candidate documentation.** These commands describe distribution
-3.1.0 after installing the qualified candidate wheel. They do not claim that
-3.1.0 is published or available from PyPI; the generic package install command
-below resolves only the version actually published by the package index.
+The source distribution version is 3.1.0. PyPI and GitHub Releases are
+authoritative for actual publication and release history. These commands apply
+when distribution 3.1.0 is installed; the generic package install command below
+resolves only the version actually available from the package index.
 
 This is the canonical DSE user workflow document. Every ordinary command below
 uses the installed package and portable files created here; no source checkout,
@@ -40,11 +40,11 @@ sed 's/{$literal: 1}/{$literal: 2}/' "$DSE_DEMO/scenario.yaml" > "$DSE_DEMO/scen
 scenario --help
 ```
 
-The identity check uses the same active Python interpreter as installation. For
-a qualified candidate-wheel installation it should report DSE distribution
-`3.1.0`; the resolved module path shows the code Python actually imports. This
-distribution version is distinct from Engine 1 (`1.0.0`) and Engine 2 (`2.0.0`)
-compatibility versions.
+The identity check uses the same active Python interpreter as installation. An
+installation of distribution 3.1.0 should report DSE distribution `3.1.0`; the
+resolved module path shows the code Python actually imports. This distribution
+version is distinct from Engine 1 (`1.0.0`) and Engine 2 (`2.0.0`) compatibility
+versions.
 
 Installing a checkout with `python3 -m pip install .` is
 **source-development-only**. Installed-package workflows are primary.

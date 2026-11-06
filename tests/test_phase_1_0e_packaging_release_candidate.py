@@ -128,20 +128,28 @@ class Phase10EPackagingReleaseCandidateTests(unittest.TestCase):
             historical_payload["manifest"].pop("engine_version")
             self.assertEqual(current_payload, historical_payload)
 
-    def test_package_readme_identifies_unpublished_release_candidate(self):
-        readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        quickstart = (ROOT / "docs" / "quickstart.md").read_text(encoding="utf-8")
+    def test_current_documentation_uses_release_neutral_status(self):
+        paths = (
+            ROOT / "README.md",
+            ROOT / "docs" / "release-notes-3.1.0.md",
+            ROOT / "docs" / "quickstart.md",
+            ROOT / "docs" / "api.md",
+            ROOT / "docs" / "dsl-reference.md",
+            ROOT / "docs" / "engine2-suite.md",
+        )
+        documents = tuple(path.read_text(encoding="utf-8") for path in paths)
+        readme, _, quickstart, *_ = documents
         combined = f"{readme}\n{quickstart}".lower()
         self.assertIn("pip install deterministic-scenario-engine", combined)
         self.assertNotIn("/users/", combined)
         self.assertNotIn("phase3_2_validation_venv", combined)
-        self.assertRegex(
-            combined,
-            rf"unpublished\s+candidate\s+distribution\s+version\s+{re.escape(VERSION)}",
-        )
-        self.assertIn("not a claim that 3.1.0 is published or available from pypi", combined)
-        self.assertNotIn("pypi.org/project/deterministic-scenario-engine/3.1.0", combined)
-        self.assertNotIn("releases/tag/3.1.0", combined)
+        self.assertIn(f"source distribution version is `{VERSION}`", combined)
+        self.assertIn("pypi and github releases are authoritative", combined)
+        for path, document in zip(paths, documents, strict=True):
+            with self.subTest(path=path.relative_to(ROOT)):
+                self.assertIn(VERSION, document)
+                self.assertNotRegex(document.lower(), r"unpublished\s+(?:release\s+)?candidate")
+                self.assertNotRegex(document.lower(), rf"{re.escape(VERSION)}\s+release-candidate")
 
     def test_top_level_api_is_unchanged_by_version_authority_module(self):
         self.assertNotIn("VERSION", scenario_engine.__all__)

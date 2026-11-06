@@ -1,8 +1,8 @@
-# Deterministic Scenario Engine 3.1.0 candidate
+# Deterministic Scenario Engine 3.1.0
 
-**Status: UNPUBLISHED RELEASE CANDIDATE.** Distribution 3.1.0 is not claimed to
-be available from PyPI or as a GitHub Release. These notes describe qualification
-scope only; they do not authorize tagging, publication, or production adoption.
+The source distribution version is 3.1.0. PyPI and GitHub Releases are
+authoritative for actual publication and release history. These notes describe
+the distribution contents; they do not authorize tagging or publication.
 
 ## Additive features
 
@@ -44,7 +44,7 @@ originating exception. No network or remote evidence resolver is introduced.
 
 ## Explicit non-goals
 
-This release candidate does not provide exhaustive state-space exploration,
+This distribution does not provide exhaustive state-space exploration,
 systematic scheduler branching, race-detection completeness, shrinking or
 minimization, parallel or distributed execution, remote URI inputs, hidden plugin
 discovery, implicit schedule-seed derivation, cross-major promotion, or automatic
