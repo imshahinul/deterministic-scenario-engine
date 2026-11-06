@@ -1,11 +1,10 @@
-# Engine 2 serial suite candidate contract
+# Engine 2 serial suite contract
 
-This document defines the unaccepted E2-1 candidate contracts
-`scenario.engine2-case/1` and `scenario.engine2-suite/1`. They are additive,
-module-qualified contracts. They are not frozen until independent review accepts
-their literal vectors. Existing Result/2, Manifest/2, Schedule/1, Scheduler/1,
-Suite Run/2, Engine 1, distribution versions, and package-root exports are
-unchanged.
+This document defines the accepted `scenario.engine2-case/1`,
+`scenario.engine2-suite-plan/1`, and `scenario.engine2-suite/1` contracts included
+in the 3.1.0 release candidate. They are additive and module-qualified. Existing
+Result/2, Manifest/2, Schedule/1, Scheduler/1, historical Suite Run/2, Engine 1,
+Engine 2 compatibility version 2.0.0, and package-root exports are unchanged.
 
 ## Scope and API
 

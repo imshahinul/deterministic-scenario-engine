@@ -26,6 +26,8 @@ make expected behavior explicit.
 - DSL 1 parsing, compilation, and deterministic execution
 - DSL 2 logical-actor execution with an explicit independent schedule seed
 - canonical Result/2, Manifest/2, and Schedule/1 evidence with exact replay
+- finite, ordered serial Engine 2 suites with strict offline aggregate verification
+- finite explicit schedule-seed sweeps over the Engine 2 suite runner
 - actor-aware inspect/explain and deterministic offline trace viewing
 - addressed randomness and logical IDs that do not depend on a shared stream
 - current state plus append-only committed history and artifacts
@@ -78,10 +80,11 @@ and observe the module location it actually imports:
 python3 -c 'from importlib.metadata import version; from pathlib import Path; import scenario_engine; print("DSE distribution:", version("deterministic-scenario-engine")); print("Imported module:", Path(scenario_engine.__file__).resolve())'
 ```
 
-For this release the distribution is `3.0.1`; a source-development editable
-install resolves the module under its `src/scenario_engine` directory. The DSE
-distribution version is distinct from Engine 1 (`1.0.0`) and Engine 2 (`2.0.0`)
-compatibility versions.
+This release-candidate source tree has distribution coordinate `3.1.0`; this is
+not a claim that 3.1.0 is published or available from PyPI. A source-development
+editable install resolves the module under its `src/scenario_engine` directory.
+The DSE distribution version is distinct from Engine 1 (`1.0.0`) and Engine 2
+(`2.0.0`) compatibility versions.
 
 Install only the named optional integrations you need:
 
@@ -144,15 +147,21 @@ self-contained offline HTML file from supported result/evidence.
 - [2.2.0 release notes](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/release-notes-2.2.0.md)
 - [3.0.0 release notes](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/release-notes-3.0.0.md)
 - [3.0.1 release notes](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/release-notes-3.0.1.md)
+- [3.1.0 candidate release notes](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/release-notes-3.1.0.md)
+- [Engine 2 serial suites](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/engine2-suite.md)
+- [Engine 2 schedule-seed exploration](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/engine2-exploration.md)
 - [Phase 2 public contract, CLI, and hard bounds](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/phase2-public-contract.md)
 - [Phase 3 public contract and evidence interchange](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/phase3-public-contract.md)
 
 ## Status
 
 Distribution release identity and deterministic engine compatibility are
-separate contracts. This source tree reports published distribution version
-3.0.1 and public Engine 2.0.0. Engine 1 manifests remain exactly 1.0.0
+separate contracts. This source tree reports unpublished candidate distribution
+version 3.1.0 and public Engine 2.0.0. Engine 1 manifests remain exactly 1.0.0
 with integer DSL 1; Engine 2 manifests use 2.0.0 with integer DSL 2. Supported
-Python versions are 3.11–3.14. Suite Run/2 is reader/schema support only; Engine
-2 suite orchestration, cross-major promotion, remote URI input, and implicit
-schedule-seed derivation are unsupported. The project is Apache-2.0 licensed.
+Python versions are 3.11–3.14. Module-qualified Engine 2 APIs provide ordered
+serial suite execution, strict aggregate verification, exact native replay, and
+finite explicit schedule-seed sweeps. These additive contracts do not produce or
+reinterpret historical Suite Run/2. Exhaustive exploration, distributed or
+parallel execution, cross-major promotion, remote URI input, and implicit
+schedule-seed derivation remain unsupported. The project is Apache-2.0 licensed.

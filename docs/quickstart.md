@@ -1,6 +1,9 @@
 # Canonical installed-package workflows
 
-**3.0.1 release documentation.** These commands apply to distribution 3.0.1.
+**3.1.0 release-candidate documentation.** These commands describe distribution
+3.1.0 after installing the qualified candidate wheel. They do not claim that
+3.1.0 is published or available from PyPI; the generic package install command
+below resolves only the version actually published by the package index.
 
 This is the canonical DSE user workflow document. Every ordinary command below
 uses the installed package and portable files created here; no source checkout,
@@ -37,10 +40,11 @@ sed 's/{$literal: 1}/{$literal: 2}/' "$DSE_DEMO/scenario.yaml" > "$DSE_DEMO/scen
 scenario --help
 ```
 
-The identity check uses the same active Python interpreter as installation. It
-should report DSE distribution `3.0.1`; the resolved module path shows the code
-Python actually imports. This distribution version is distinct from Engine 1
-(`1.0.0`) and Engine 2 (`2.0.0`) compatibility versions.
+The identity check uses the same active Python interpreter as installation. For
+a qualified candidate-wheel installation it should report DSE distribution
+`3.1.0`; the resolved module path shows the code Python actually imports. This
+distribution version is distinct from Engine 1 (`1.0.0`) and Engine 2 (`2.0.0`)
+compatibility versions.
 
 Installing a checkout with `python3 -m pip install .` is
 **source-development-only**. Installed-package workflows are primary.
@@ -117,6 +121,17 @@ The comparison parses both JSON documents. The `--result-out` file contains
 canonical Result/2 bytes, while JSON written to terminal stdout has one trailing
 presentation newline; raw byte comparison between those two forms is therefore
 not claimed.
+
+For multiple Engine 2 cases, use the module-qualified
+`scenario_engine.engine2_suite` API documented in [Engine 2 serial suites](engine2-suite.md).
+It executes finite plans serially in declared order and can strictly verify the
+canonical aggregate plus supplied native Result/2, Manifest/2, and Schedule/1
+children offline. Verification is not replay; exact replay still requires each
+case's exact scenario, effective inputs, schedule, and trusted plugins. The
+separate module-qualified `scenario_engine.engine2_explore` API performs only
+finite explicit schedule-seed sweeps. It is not exhaustive exploration,
+parallelism, or distributed execution. Neither API produces or reinterprets the
+historical Suite Run/2 contract.
 
 Both outputs are constructed before publication. Each destination is published
 atomically as an absent file; if this command publishes one output and then the

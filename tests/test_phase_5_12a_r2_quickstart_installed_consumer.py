@@ -12,7 +12,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 QUICKSTART = ROOT / "docs/quickstart.md"
-EXPECTED_DISTRIBUTION_VERSION = "3.0.1"
+EXPECTED_DISTRIBUTION_VERSION = "3.1.0"
 DSL1 = """dsl_version: 1
 scenario: dse_demo
 clock: {start: '2026-01-01T00:00:00Z'}

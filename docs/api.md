@@ -9,7 +9,7 @@ exports.
 ## Constants and value objects
 
 - `scenario_engine.ENGINE_VERSION` — public current Engine coordinate, `2.0.0`.
-- `scenario_engine._version.VERSION` — distribution coordinate, `3.0.0`.
+- `scenario_engine._version.VERSION` — candidate distribution coordinate, `3.1.0`.
 - `scenario_engine._version.ENGINE1_VERSION` — explicit historical Engine 1
   execution coordinate, `1.0.0`; not added to the frozen package-root exports.
 
@@ -85,6 +85,39 @@ executes every recorded scheduler choice, verifies all coordinates and final
 observations, and returns the verified immutable Result/2. It never reconstructs
 missing schedule evidence. Compatibility classification is explicit and does not
 execute, migrate, or promote evidence. Existing Engine 1 functions are unchanged.
+
+### Engine 2 suites and finite seed sweeps
+
+The additive suite API is public only from `scenario_engine.engine2_suite`:
+
+```python
+Engine2CaseRequest(...)
+Engine2SuitePlan(cases)
+execute_engine2_suite(plan) -> Engine2SuiteOutcome
+read_engine2_suite(source) -> Engine2SuiteOutcome
+verify_engine2_suite(suite, child_evidence=None) -> Engine2SuiteOutcome
+```
+
+Suite execution is finite, serial, and exactly plan ordered. Every case uses
+explicit Engine 2 coordinates. The strict reader verifies canonical aggregate
+shape and identity; `verify_engine2_suite()` additionally verifies supplied
+native Result/2, Manifest/2, and Schedule/1 bytes and their cross-artifact
+coordinates. Offline aggregate verification does not execute or replay cases.
+Exact replay remains a separate `replay_engine2()` operation requiring the exact
+scenario, effective inputs, and trusted plugin registry.
+
+The finite exploration convenience API is public only from
+`scenario_engine.engine2_explore`:
+
+```python
+Engine2SeedSweepRequest(...)
+explore_engine2_seeds(request) -> Engine2SeedSweepOutcome
+```
+
+It accepts an explicit ordered collection of 1..64 unique schedule seeds and
+uses the suite runner serially. It does not derive seeds, exhaustively explore a
+state space, run in parallel, or distribute execution. Neither module adds
+package-root exports or creates historical Suite Run/2 artifacts.
 
 `schedule_seed` is a required independent unsigned 64-bit coordinate. It is not
 derived from `root_seed`. Engine 2 writes Result/2, Manifest/2, and Schedule/1;
