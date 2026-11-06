@@ -1,0 +1,432 @@
+name: Publish qualified 3.1.0 artifacts to PyPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type "PUBLISH 3.1.0" to authorize this publication
+        required: true
+        type: string
+
+# Serialize this one-shot release. A newer dispatch must never cancel a publisher.
+concurrency:
+  group: publish-pypi-3.1.0
+  cancel-in-progress: false
+
+# Deny all permissions unless a job explicitly grants one.
+permissions: {}
+
+env:
+  RELEASE_TAG: "3.1.0"
+  TAG_OBJECT_SHA: a023699ed89dc774c885ad8edeb6fe5e6e29406c
+  SOURCE_COMMIT_SHA: 6ee8b5c32b96a89dead056f584fa1ad1e05c8f98
+  SOURCE_TREE_SHA: f060449cf0f4d5e3a05e14e1747269d47bc2cd79
+  WHEEL: deterministic_scenario_engine-3.1.0-py3-none-any.whl
+  WHEEL_SIZE: "270860"
+  WHEEL_SHA256: 6a2ee66e07689daa52e27752a4a529040c314c8fcf2a30e111471f92e13eaa32
+  SDIST: deterministic_scenario_engine-3.1.0.tar.gz
+  SDIST_SIZE: "462647"
+  SDIST_SHA256: b2ef827d9bb5da3d8ff2857834f82d7584d9036539df75c16390c971437f3187
+
+jobs:
+  # GitHub documents that only users with push access receive draft releases from
+  # the releases listing. The broader contents:write grant is confined to this
+  # read-only acquisition job; no step invokes a repository mutation endpoint.
+  acquire-draft-assets:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.confirmation == 'PUBLISH 3.1.0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      artifact-digest: ${{ steps.upload.outputs.artifact-digest }}
+    steps:
+      - name: Require the exact repository and dispatch authorization
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REPOSITORY}" = "imshahinul/deterministic-scenario-engine"
+          test "${GITHUB_EVENT_NAME}" = workflow_dispatch
+          test "${GITHUB_REF}" = refs/heads/main
+          test "${CONFIRMATION}" = "PUBLISH 3.1.0"
+
+      - name: Find exactly one authenticated draft release and exact assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --paginate --slurp \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            > release-pages.json
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+
+          pages = json.loads(pathlib.Path("release-pages.json").read_text(encoding="utf-8"))
+          releases = [release for page in pages for release in page]
+          exact_tag = [
+              release for release in releases
+              if release.get("tag_name") == os.environ["RELEASE_TAG"]
+          ]
+          if len(exact_tag) != 1 or exact_tag[0].get("draft") is not True:
+              raise SystemExit(
+                  "expected exactly one visible release for tag 3.1.0 and it must be draft"
+              )
+
+          release = exact_tag[0]
+          expected = {
+              os.environ["WHEEL"]: int(os.environ["WHEEL_SIZE"]),
+              os.environ["SDIST"]: int(os.environ["SDIST_SIZE"]),
+          }
+          assets = release.get("assets")
+          if not isinstance(assets, list) or len(assets) != 2:
+              raise SystemExit("draft release must contain exactly two asset records")
+          names = [asset.get("name") for asset in assets]
+          if len(set(names)) != 2 or set(names) != set(expected):
+              raise SystemExit(f"draft release asset names are not exact: {names!r}")
+
+          records = []
+          for asset in assets:
+              name = asset["name"]
+              asset_id = asset.get("id")
+              size = asset.get("size")
+              url = asset.get("url")
+              expected_url = (
+                  f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}"
+                  f"/releases/assets/{asset_id}"
+              )
+              if not isinstance(asset_id, int) or asset_id <= 0 or url != expected_url:
+                  raise SystemExit(f"invalid authenticated asset record for {name}")
+              if size != expected[name]:
+                  raise SystemExit(
+                      f"draft asset size mismatch for {name}: {size!r} != {expected[name]}"
+                  )
+              records.append((name, asset_id))
+
+          with pathlib.Path("asset-records.tsv").open("w", encoding="utf-8") as stream:
+              for name, asset_id in sorted(records):
+                  stream.write(f"{name}\t{asset_id}\n")
+          PY
+
+      - name: Download only the verified authenticated draft assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir dist
+          while IFS=$'\t' read -r name asset_id; do
+            gh api \
+              -H "Accept: application/octet-stream" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}" \
+              > "dist/${name}"
+          done < asset-records.tsv
+          mapfile -t files < <(find dist -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)
+          test "${#files[@]}" -eq 2
+          test "${files[0]}" = "${WHEEL}"
+          test "${files[1]}" = "${SDIST}"
+          test "$(stat -c %s "dist/${WHEEL}")" = "${WHEEL_SIZE}"
+          test "$(stat -c %s "dist/${SDIST}")" = "${SDIST_SIZE}"
+          echo "${WHEEL_SHA256}  dist/${WHEEL}" | sha256sum --check --strict
+          echo "${SDIST_SHA256}  dist/${SDIST}" | sha256sum --check --strict
+
+      - name: Preserve the acquired immutable distributions
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: qualified-pypi-3.1.0-acquired
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  verify-qualified-artifacts:
+    needs: acquire-draft-assets
+    if: >-
+      needs.acquire-draft-assets.result == 'success' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.confirmation == 'PUBLISH 3.1.0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      artifact-digest: ${{ steps.upload.outputs.artifact-digest }}
+    steps:
+      - name: Check out the immutable dispatch commit with tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+
+      - name: Verify dispatch commit, source tag, commit, tree, and versions
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REPOSITORY}" = "imshahinul/deterministic-scenario-engine"
+          test "${GITHUB_EVENT_NAME}" = workflow_dispatch
+          test "${GITHUB_REF}" = refs/heads/main
+          test "${CONFIRMATION}" = "PUBLISH 3.1.0"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test "$(git cat-file -t "${RELEASE_TAG}")" = tag
+          test "$(git rev-parse "${RELEASE_TAG}")" = "${TAG_OBJECT_SHA}"
+          test "$(git rev-parse "${RELEASE_TAG}^{commit}")" = "${SOURCE_COMMIT_SHA}"
+          test "$(git rev-parse "${RELEASE_TAG}^{tree}")" = "${SOURCE_TREE_SHA}"
+          git show "${RELEASE_TAG}:src/scenario_engine/_version.py" > tagged-version.py
+          python - <<'PY'
+          import ast
+          import pathlib
+
+          expected = {
+              "VERSION": "3.1.0",
+              "ENGINE_VERSION": "2.0.0",
+              "ENGINE1_VERSION": "1.0.0",
+          }
+          source = pathlib.Path("tagged-version.py").read_text(encoding="utf-8")
+          tree = ast.parse(source, filename="3.1.0:src/scenario_engine/_version.py")
+          found = {name: [] for name in expected}
+          for statement in tree.body:
+              if isinstance(statement, ast.Assign):
+                  for target in statement.targets:
+                      if isinstance(target, ast.Name) and target.id in found:
+                          found[target.id].append(statement.value)
+              elif isinstance(statement, ast.AnnAssign):
+                  target = statement.target
+                  if isinstance(target, ast.Name) and target.id in found:
+                      found[target.id].append(statement.value)
+
+          for name, wanted in expected.items():
+              values = found[name]
+              if len(values) != 1:
+                  raise SystemExit(f"tagged source must assign {name} exactly once")
+              value = values[0]
+              if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
+                  raise SystemExit(f"tagged source {name} must be a string literal")
+              if value.value != wanted:
+                  raise SystemExit(
+                      f"tagged source {name} mismatch: {value.value!r} != {wanted!r}"
+                  )
+          PY
+
+      - name: Download the exact acquired artifact from this run
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.acquire-draft-assets.outputs.artifact-id }}
+          path: dist/
+          merge-multiple: true
+
+      - name: Reverify exact asset identity and hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${{ needs.acquire-draft-assets.outputs.artifact-digest }}"
+          mapfile -t files < <(find dist -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)
+          test "${#files[@]}" -eq 2
+          test "${files[0]}" = "${WHEEL}"
+          test "${files[1]}" = "${SDIST}"
+          test "$(stat -c %s "dist/${WHEEL}")" = "${WHEEL_SIZE}"
+          test "$(stat -c %s "dist/${SDIST}")" = "${SDIST_SIZE}"
+          echo "${WHEEL_SHA256}  dist/${WHEEL}" | sha256sum --check --strict
+          echo "${SDIST_SHA256}  dist/${SDIST}" | sha256sum --check --strict
+
+      - name: Verify immutable package metadata and compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64
+          import csv
+          import hashlib
+          import io
+          import os
+          import pathlib
+          import tarfile
+          import zipfile
+          from email.parser import BytesParser
+          from email.policy import default
+
+          dist = pathlib.Path("dist")
+          wheel_path = dist / os.environ["WHEEL"]
+          sdist_path = dist / os.environ["SDIST"]
+          canonical_name = "deterministic-scenario-engine"
+          version = "3.1.0"
+
+          with zipfile.ZipFile(wheel_path) as archive:
+              if archive.testzip() is not None:
+                  raise SystemExit("wheel ZIP CRC validation failed")
+              names = archive.namelist()
+              metadata_names = [n for n in names if n.endswith(".dist-info/METADATA")]
+              wheel_names = [n for n in names if n.endswith(".dist-info/WHEEL")]
+              record_names = [n for n in names if n.endswith(".dist-info/RECORD")]
+              if not (len(metadata_names) == len(wheel_names) == len(record_names) == 1):
+                  raise SystemExit("wheel metadata layout is not exact")
+              wheel_metadata = BytesParser(policy=default).parsebytes(
+                  archive.read(metadata_names[0])
+              )
+              wheel_descriptor = BytesParser(policy=default).parsebytes(
+                  archive.read(wheel_names[0])
+              )
+              if wheel_descriptor.get("Root-Is-Purelib") != "true":
+                  raise SystemExit("wheel is not pure Python")
+              if wheel_descriptor.get_all("Tag", []) != ["py3-none-any"]:
+                  raise SystemExit("wheel compatibility tag is not py3-none-any")
+              rows = list(csv.reader(io.StringIO(
+                  archive.read(record_names[0]).decode("utf-8")
+              )))
+              if {row[0] for row in rows} != set(names):
+                  raise SystemExit("wheel RECORD does not cover the exact archive")
+              for filename, digest, size in rows:
+                  if filename == record_names[0]:
+                      if digest or size:
+                          raise SystemExit("wheel RECORD self-entry is invalid")
+                      continue
+                  data = archive.read(filename)
+                  encoded = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=").decode()
+                  if digest != f"sha256={encoded}" or size != str(len(data)):
+                      raise SystemExit(f"wheel RECORD mismatch: {filename}")
+
+          with tarfile.open(sdist_path, mode="r:gz") as archive:
+              members = archive.getmembers()
+              root = "deterministic_scenario_engine-3.1.0"
+              if not members or any(
+                  pathlib.PurePosixPath(member.name).is_absolute()
+                  or ".." in pathlib.PurePosixPath(member.name).parts
+                  or pathlib.PurePosixPath(member.name).parts[0] != root
+                  for member in members
+              ):
+                  raise SystemExit("sdist has an unsafe or unexpected archive layout")
+              if any(member.issym() or member.islnk() for member in members):
+                  raise SystemExit("sdist contains links")
+              package_info = archive.extractfile(f"{root}/PKG-INFO")
+              if package_info is None:
+                  raise SystemExit("sdist PKG-INFO is missing")
+              sdist_metadata = BytesParser(policy=default).parsebytes(package_info.read())
+              required_source = {
+                  f"{root}/pyproject.toml",
+                  f"{root}/src/scenario_engine/_version.py",
+              }
+              if not required_source.issubset({member.name for member in members}):
+                  raise SystemExit("sdist is missing required source metadata")
+
+          for label, metadata in (("wheel", wheel_metadata), ("sdist", sdist_metadata)):
+              if metadata.get("Name") != canonical_name:
+                  raise SystemExit(f"{label} project name mismatch")
+              if metadata.get("Version") != version:
+                  raise SystemExit(f"{label} version mismatch")
+              if metadata.get("Requires-Python") != ">=3.11":
+                  raise SystemExit(f"{label} Python compatibility mismatch")
+          if sorted(wheel_metadata.get_all("Requires-Dist", [])) != sorted(
+              sdist_metadata.get_all("Requires-Dist", [])
+          ):
+              raise SystemExit("wheel and sdist dependency metadata differ")
+          PY
+
+      - name: Refuse an existing or ambiguous PyPI 3.1.0 release
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          base = "https://pypi.org/pypi/deterministic-scenario-engine"
+          request = urllib.request.Request(
+              f"{base}/3.1.0/json",
+              headers={"User-Agent": "DSE-GHP-1R1-qualified-release-verifier"},
+          )
+          try:
+              urllib.request.urlopen(request, timeout=30)
+          except urllib.error.HTTPError as error:
+              if error.code != 404:
+                  raise SystemExit(f"ambiguous PyPI version response: HTTP {error.code}")
+          except Exception as error:
+              raise SystemExit(f"ambiguous PyPI version state: {error}")
+          else:
+              raise SystemExit("PyPI version 3.1.0 already exists")
+
+          request = urllib.request.Request(
+              f"{base}/json",
+              headers={"User-Agent": "DSE-GHP-1R1-qualified-release-verifier"},
+          )
+          try:
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  if response.status != 200:
+                      raise SystemExit(f"ambiguous PyPI project response: HTTP {response.status}")
+                  project = json.load(response)
+          except Exception as error:
+              raise SystemExit(f"ambiguous PyPI project state: {error}")
+          if "3.1.0" in project.get("releases", {}):
+              raise SystemExit("PyPI project metadata already contains version 3.1.0")
+          published = {
+              item.get("filename")
+              for files in project.get("releases", {}).values()
+              for item in files
+          }
+          expected = {os.environ["WHEEL"], os.environ["SDIST"]}
+          if published & expected:
+              raise SystemExit("a qualified filename is already public on PyPI")
+          PY
+
+      - name: Preserve the verified immutable distributions for publication
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: qualified-pypi-3.1.0-verified
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  publish-to-pypi:
+    needs: verify-qualified-artifacts
+    if: >-
+      needs.verify-qualified-artifacts.result == 'success' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.confirmation == 'PUBLISH 3.1.0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Download the exact verified artifact from this run
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.verify-qualified-artifacts.outputs.artifact-id }}
+          path: dist/
+          merge-multiple: true
+
+      - name: Final immutable identity gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${{ needs.verify-qualified-artifacts.outputs.artifact-digest }}"
+          mapfile -t files < <(find dist -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)
+          test "${#files[@]}" -eq 2
+          test "${files[0]}" = "${WHEEL}"
+          test "${files[1]}" = "${SDIST}"
+          test "$(stat -c %s "dist/${WHEEL}")" = "${WHEEL_SIZE}"
+          test "$(stat -c %s "dist/${SDIST}")" = "${SDIST_SIZE}"
+          echo "${WHEEL_SHA256}  dist/${WHEEL}" | sha256sum --check --strict
+          echo "${SDIST_SHA256}  dist/${SDIST}" | sha256sum --check --strict
+
+      - name: Publish once using PyPI Trusted Publishing
+        uses: pypa/gh-action-pypi-publish@release/v1
