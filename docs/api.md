@@ -9,7 +9,7 @@ exports.
 ## Constants and value objects
 
 - `scenario_engine.ENGINE_VERSION` — public current Engine coordinate, `2.0.0`.
-- `scenario_engine._version.VERSION` — candidate distribution coordinate, `3.1.0`.
+- `scenario_engine._version.VERSION` — source distribution coordinate, `3.1.0`.
 - `scenario_engine._version.ENGINE1_VERSION` — explicit historical Engine 1
   execution coordinate, `1.0.0`; not added to the frozen package-root exports.
 
