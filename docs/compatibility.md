@@ -5,7 +5,7 @@ and plugin contracts. Distribution metadata remains a packaging concern.
 
 ## Version roles
 
-Candidate distribution `VERSION` is 3.1.0 and public `ENGINE_VERSION` is 2.0.0. The
+Distribution `VERSION` is 3.0.0 and public `ENGINE_VERSION` is 2.0.0. The
 historical Engine 1 coordinate is independently fixed at 1.0.0: every
 `scenario.manifest/1` produced by DSL 1 continues to record 1.0.0. Engine 2
 Manifest/2 records 2.0.0. Package version is never inferred as an execution
