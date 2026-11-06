@@ -32,7 +32,7 @@ PACK1_INDEX_SHA256 = "4909bc5876bcf9add8f8444f7dcfb4b07153b9afea489226f30db86460
 
 
 def test_t01_t06_version_roles_are_separate_and_exact() -> None:
-    assert VERSION == "3.0.1"
+    assert VERSION == "3.1.0"
     assert scenario_engine.ENGINE_VERSION == ENGINE_VERSION == ENGINE2_EXECUTION_VERSION == "2.0.0"
     assert ENGINE1_VERSION == "1.0.0"
     result1 = run_scenario(compile_document(parse_yaml(DSL1)), "s")

@@ -54,7 +54,7 @@ class Phase10EPackagingReleaseCandidateTests(unittest.TestCase):
             "scenario_engine._version.VERSION",
         )
         # Phase 2 changes package identity, not the frozen deterministic contract.
-        self.assertEqual(VERSION, "3.0.1")
+        self.assertEqual(VERSION, "3.1.0")
         self.assertEqual(ENGINE_VERSION, "2.0.0")
 
     def test_license_readme_and_build_backend_metadata(self):
@@ -128,26 +128,20 @@ class Phase10EPackagingReleaseCandidateTests(unittest.TestCase):
             historical_payload["manifest"].pop("engine_version")
             self.assertEqual(current_payload, historical_payload)
 
-    def test_package_readme_is_release_state_neutral(self):
+    def test_package_readme_identifies_unpublished_release_candidate(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         quickstart = (ROOT / "docs" / "quickstart.md").read_text(encoding="utf-8")
         combined = f"{readme}\n{quickstart}".lower()
         self.assertIn("pip install deterministic-scenario-engine", combined)
         self.assertNotIn("/users/", combined)
         self.assertNotIn("phase3_2_validation_venv", combined)
-
-        current_version = re.escape(VERSION.lower())
-        forbidden_patterns = (
-            rf"(?:unpublished|not\s+published)[^\n]{{0,80}}{current_version}",
-            rf"{current_version}[^\n]{{0,80}}(?:unpublished|not\s+published)",
-            rf"no\s+{current_version}\s+tag(?:\s+exists)?",
-            r"no\s+github\s+release(?:\s+exists)?",
-            r"no\s+(?:package-index|pypi)\s+publication(?:\s+exists)?",
-            r"publication\s+has\s+not\s+occurred",
+        self.assertRegex(
+            combined,
+            rf"unpublished\s+candidate\s+distribution\s+version\s+{re.escape(VERSION)}",
         )
-        for pattern in forbidden_patterns:
-            with self.subTest(pattern=pattern):
-                self.assertIsNone(re.search(pattern, readme.lower()))
+        self.assertIn("not a claim that 3.1.0 is published or available from pypi", combined)
+        self.assertNotIn("pypi.org/project/deterministic-scenario-engine/3.1.0", combined)
+        self.assertNotIn("releases/tag/3.1.0", combined)
 
     def test_top_level_api_is_unchanged_by_version_authority_module(self):
         self.assertNotIn("VERSION", scenario_engine.__all__)

@@ -121,7 +121,7 @@ class V1ReadTests(unittest.TestCase):
 
     def test_v1_api_version_and_three_result_goldens_remain_unchanged(self):
         expected = scenario_engine.__all__
-        self.assertEqual(VERSION, "3.0.1")
+        self.assertEqual(VERSION, "3.1.0")
         self.assertEqual(scenario_engine.__all__, expected)
         cart_source = (ROOT / "examples" / "phase0_1b_cart.yaml").read_text()
         cart = run_scenario(compile_document(parse_yaml(cart_source)), "s")
