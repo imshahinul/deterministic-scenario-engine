@@ -9,7 +9,8 @@ exports.
 ## Constants and value objects
 
 - `scenario_engine.ENGINE_VERSION` — public current Engine coordinate, `2.0.0`.
-- `scenario_engine._version.VERSION` — source distribution coordinate, `3.1.0`.
+- `scenario_engine._version.VERSION` — candidate source distribution coordinate,
+  `3.2.0`; publication status remains external to this value.
 - `scenario_engine._version.ENGINE1_VERSION` — explicit historical Engine 1
   execution coordinate, `1.0.0`; not added to the frozen package-root exports.
 
@@ -118,6 +119,51 @@ It accepts an explicit ordered collection of 1..64 unique schedule seeds and
 uses the suite runner serially. It does not derive seeds, exhaustively explore a
 state space, run in parallel, or distribute execution. Neither module adds
 package-root exports or creates historical Suite Run/2 artifacts.
+
+### Engine 2 restricted failure minimizers
+
+The actor minimizer is public only from `scenario_engine.engine2_shrink`:
+
+```python
+from scenario_engine.engine2_shrink import (
+    Engine2ShrinkOutcome,
+    Engine2ShrinkRequest,
+    shrink_failed_scenario,
+)
+```
+
+`shrink_failed_scenario(request: Engine2ShrinkRequest) ->
+Engine2ShrinkOutcome` considers only whole-actor deletion. Its initially
+eligible actors were not selected before the original failure; it always retains
+the failing actor and target step.
+
+The input minimizer is public only from
+`scenario_engine.engine2_input_shrink`:
+
+```python
+from scenario_engine.engine2_input_shrink import (
+    Engine2InputShrinkOutcome,
+    Engine2InputShrinkRequest,
+    shrink_failed_inputs,
+)
+```
+
+`shrink_failed_inputs(request: Engine2InputShrinkRequest) ->
+Engine2InputShrinkOutcome` deletes exactly one list element per candidate. It
+limits eligibility to exact declared `$input` paths or descendants and excludes
+unrelated sibling lists.
+
+Neither API is exported from `scenario_engine`, exposed through the CLI, or
+permitted to execute plugins. Both require one unchanged target source
+invariant, native `FAILED` / `InvariantViolation` evidence, fixed coordinates,
+repeated deterministic validation, candidate-native Result/2 and Schedule/1,
+and exact replay of accepted reductions. Their preservation label is
+`SOURCE_ANCHORED_SINGLE_INVARIANT_SIGNATURE`; it is not independent proof of
+general semantic equivalence. Summaries are noncanonical, deadlines are
+cooperative, and one-deletion minimality is conditional on a complete final pass,
+not a global guarantee. See [actor minimization](engine2-shrink.md) and
+[input-list minimization](engine2-input-shrink.md) for constructors, exact bounds,
+security limitations, and tested examples.
 
 `schedule_seed` is a required independent unsigned 64-bit coordinate. It is not
 derived from `root_seed`. Engine 2 writes Result/2, Manifest/2, and Schedule/1;

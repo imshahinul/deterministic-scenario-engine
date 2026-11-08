@@ -4,9 +4,10 @@
 
 Deterministic Scenario Engine (DSE) creates reproducible, state-consistent
 business histories and deterministic scenario suites with ground truth for
-testing. Distribution 3.0.0 was published on October 9, 2026, on
-[PyPI](https://pypi.org/project/deterministic-scenario-engine/3.0.0/) and as a
-[GitHub Release](https://github.com/imshahinul/deterministic-scenario-engine/releases/tag/3.0.0).
+testing. This source tree is the distribution 3.2.0 candidate; the current
+public distribution remains 3.1.0 on
+[PyPI](https://pypi.org/project/deterministic-scenario-engine/3.1.0/) and as a
+[GitHub Release](https://github.com/imshahinul/deterministic-scenario-engine/releases/tag/3.1.0/).
 Distribution and execution compatibility identities are separate: public
 `ENGINE_VERSION` is 2.0.0, while the preserved DSL 1 path records Engine 1.0.0.
 PyPI and GitHub Releases remain authoritative for public-release availability
@@ -28,6 +29,8 @@ make expected behavior explicit.
 - canonical Result/2, Manifest/2, and Schedule/1 evidence with exact replay
 - finite, ordered serial Engine 2 suites with strict offline aggregate verification
 - finite explicit schedule-seed sweeps over the Engine 2 suite runner
+- restricted module-qualified Engine 2 whole-actor and input-list failure
+  minimizers with candidate-native replay
 - actor-aware inspect/explain and deterministic offline trace viewing
 - addressed randomness and logical IDs that do not depend on a shared stream
 - current state plus append-only committed history and artifacts
@@ -80,8 +83,9 @@ and observe the module location it actually imports:
 python3 -c 'from importlib.metadata import version; from pathlib import Path; import scenario_engine; print("DSE distribution:", version("deterministic-scenario-engine")); print("Imported module:", Path(scenario_engine.__file__).resolve())'
 ```
 
-The source distribution version is `3.1.0`. PyPI and GitHub Releases are
-authoritative for actual publication and release history. A source-development
+The candidate source distribution version is `3.2.0`; this statement does not
+claim publication. PyPI and GitHub Releases are authoritative for actual
+publication and release history. A source-development
 editable install resolves the module under its `src/scenario_engine` directory.
 The DSE distribution version is distinct from Engine 1 (`1.0.0`) and Engine 2
 (`2.0.0`) compatibility versions.
@@ -120,6 +124,32 @@ The installed public compatibility corpus can be discovered with
 `scenario --help` and exported without a source checkout using
 `scenario compatibility-fixtures export --out /absolute/path`.
 
+## Restricted Engine 2 failure minimizers
+
+Distribution 3.2.0 adds two module-qualified APIs without package-root exports
+or CLI exposure. `scenario_engine.engine2_shrink` provides
+`Engine2ShrinkRequest`, `Engine2ShrinkOutcome`, and
+`shrink_failed_scenario()` for whole-actor deletion. Only actors not selected
+before the original failure are initially eligible; the failing actor and its
+target step are retained. `scenario_engine.engine2_input_shrink` provides
+`Engine2InputShrinkRequest`, `Engine2InputShrinkOutcome`, and
+`shrink_failed_inputs()` for one input-list-element deletion per candidate.
+Only exact declared `$input` paths and their descendants are eligible; unrelated
+sibling lists are excluded.
+
+Both reducers require native `FAILED` / `InvariantViolation` Result/2 and
+Schedule/1 evidence, one unchanged target source invariant, fixed execution
+coordinates, repeated deterministic validation, candidate-specific native
+evidence, and exact candidate replay. Plugins are excluded. Candidate and total
+execution budgets are bounded, deadlines are cooperative rather than hard
+timeouts, summaries are noncanonical, and minimality is conditional on a
+completed one-deletion pass—never a global optimum. The preservation level
+`SOURCE_ANCHORED_SINGLE_INVARIANT_SIGNATURE` is deliberately restricted and is
+not independent proof of general semantic equivalence. See the
+[actor minimizer](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/engine2-shrink.md),
+[input minimizer](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/engine2-input-shrink.md),
+and [3.2.0 release notes](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/release-notes-3.2.0.md).
+
 ## Canonical command workflows
 
 Use the [quickstart](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/quickstart.md#canonical-installed-package-workflows)
@@ -148,21 +178,25 @@ self-contained offline HTML file from supported result/evidence.
 - [3.0.0 release notes](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/release-notes-3.0.0.md)
 - [3.0.1 release notes](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/release-notes-3.0.1.md)
 - [3.1.0 release notes](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/release-notes-3.1.0.md)
+- [3.2.0 release notes](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/release-notes-3.2.0.md)
 - [Engine 2 serial suites](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/engine2-suite.md)
 - [Engine 2 schedule-seed exploration](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/engine2-exploration.md)
+- [Engine 2 actor minimizer](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/engine2-shrink.md)
+- [Engine 2 input-list minimizer](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/engine2-input-shrink.md)
 - [Phase 2 public contract, CLI, and hard bounds](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/phase2-public-contract.md)
 - [Phase 3 public contract and evidence interchange](https://github.com/imshahinul/deterministic-scenario-engine/blob/main/docs/phase3-public-contract.md)
 
 ## Status
 
 Distribution release identity and deterministic engine compatibility are
-separate contracts. This source tree reports distribution version 3.1.0 and
+separate contracts. This source tree reports candidate distribution version 3.2.0 and
 public Engine 2.0.0. PyPI and GitHub Releases are authoritative for actual
 publication and release history. Engine 1 manifests remain exactly 1.0.0 with
 integer DSL 1; Engine 2 manifests use 2.0.0 with integer DSL 2. Supported Python
 versions are 3.11–3.14. Module-qualified Engine 2 APIs provide ordered serial
-suite execution, strict aggregate verification, exact native replay, and finite
-explicit schedule-seed sweeps. These additive contracts do not produce or
+suite execution, strict aggregate verification, exact native replay, finite
+explicit schedule-seed sweeps, and the two restricted minimizers described
+above. These additive contracts do not produce or
 reinterpret historical Suite Run/2. Exhaustive exploration, distributed or
 parallel execution, cross-major promotion, remote URI input, and implicit
 schedule-seed derivation remain unsupported. The project is Apache-2.0 licensed.
