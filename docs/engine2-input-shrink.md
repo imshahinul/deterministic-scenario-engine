@@ -1,8 +1,10 @@
 # Engine 2 bounded input-list minimizer
 
-`scenario_engine.engine2_input_shrink` is a module-qualified, local-candidate
-API. It is not exported from the package root, has no CLI, and defines no native
-artifact contract.
+`scenario_engine.engine2_input_shrink` is an accepted restricted,
+module-qualified API. Import `Engine2InputShrinkRequest`,
+`Engine2InputShrinkOutcome`, and `shrink_failed_inputs` from that module only.
+It is not exported from the package root, has no CLI, executes no plugins, and
+defines no native artifact contract.
 
 ## Exact scope
 
@@ -58,11 +60,13 @@ signature is not independent proof of full semantic equivalence.
 
 ## Bounds, outcomes, and minimality
 
-Candidate evaluations are bounded to 1..64. Actual engine executions are
-separately bounded to at most 128 and include baseline replay, baseline reruns,
+Candidate evaluations default to 64 and are bounded to 1..64. Actual engine
+executions default to 128, are bounded to 1..128, and include baseline replay, baseline reruns,
 candidate runs, and candidate replay. The budget is checked before each actual
-execution. Repetition is at least three. Input size and nesting use established
-Engine 2 suite compatibility bounds. Booleans are rejected for integer budget
+execution. Repetition defaults to three and is bounded to 3..16. The constructor
+deadline default is `0.0`, so practical calls must supply a future absolute
+monotonic deadline. Input size is at most 262,144 canonical bytes, nesting depth
+is at most 32, and source is at most 1,048,576 UTF-8 bytes. Booleans are rejected for integer budget
 fields. Cycles, mutable aliases, ambiguous container types, unsupported values,
 and oversized trees fail closed.
 
@@ -91,3 +95,75 @@ This API does not delete mapping keys, shrink scalars, reorder collections,
 alter DSL source, edit schedules, explore seeds, execute plugins, invoke the
 network or shell, serialize audits, or change Engine 1/2, Result/2, Manifest/2,
 Schedule/1, suite, exploration, release, or publication behavior.
+
+## Tested synthetic installed-consumer example
+
+This safe fixture makes `[2, 1]` fail because its length is nonzero. Deleting
+`2` preserves the restricted failure as `[1]`; deleting the final element would
+produce success and is rejected. The example uses fixed coordinates, real native
+baseline evidence, a bounded monotonic deadline, and exact original/candidate
+replay without plugins or untrusted callbacks.
+
+<!-- installed-consumer-example:start -->
+```python
+from time import monotonic
+
+from scenario_engine.engine2 import (
+    construct_result2, execute_engine2, replay_engine2, validate_engine2,
+)
+from scenario_engine.engine2_input_shrink import (
+    Engine2InputShrinkRequest, shrink_failed_inputs,
+)
+from scenario_engine.invariants import InvariantViolation
+
+source = """dsl_version: 2
+scenario: input-minimum
+clock: {start: '2026-01-01T00:00:00Z'}
+initial_state: {value: 0}
+resources:
+  cfg: {$input: cfg}
+actors:
+  - id: target
+    steps:
+      - id: fail
+        write: {value: {$len: {$resource: cfg}}}
+        transition: null
+invariants:
+  - id: stays-zero
+    check: {$lte: [{$state: value}, {$literal: 0}]}
+"""
+inputs = {"cfg": [2, 1]}
+root_seed, schedule_seed, run_index = "example-root", 0, 2
+scenario = validate_engine2(source)
+try:
+    execute_engine2(
+        scenario, root_seed, schedule_seed, run_index=run_index, inputs=inputs,
+    )
+except InvariantViolation as error:
+    baseline_result = construct_result2(scenario, error.internal_outcome)
+    baseline_schedule = error.internal_outcome.schedule
+else:
+    raise AssertionError("expected native FAILED evidence")
+
+replay_engine2(baseline_result, baseline_schedule, scenario, inputs=inputs)
+outcome = shrink_failed_inputs(Engine2InputShrinkRequest(
+    source=source, result=baseline_result, schedule=baseline_schedule,
+    root_seed=root_seed, schedule_seed=schedule_seed, run_index=run_index,
+    inputs=inputs, max_candidate_evaluations=8, total_execution_budget=64,
+    repetition_count=3, deadline=monotonic() + 30,
+))
+reduced_inputs = {"cfg": list(outcome.reduced_inputs["cfg"])}
+assert outcome.status == "REDUCED" and reduced_inputs == {"cfg": [1]}
+assert outcome.accepted_count == 1 and outcome.rejected_count == 1
+assert outcome.final_result is not None and outcome.final_schedule is not None
+assert outcome.final_result.failure == baseline_result.failure
+replay_engine2(
+    outcome.final_result, outcome.final_schedule, scenario, inputs=reduced_inputs,
+)
+```
+<!-- installed-consumer-example:end -->
+
+Controlled synthetic qualification found narrow diagnostic value for this
+causally relevant list fixture and for excluding unrelated sibling lists. These
+are synthetic-only findings, not evidence of real-world productivity, user
+demand, broad input simplification, or general semantic equivalence.

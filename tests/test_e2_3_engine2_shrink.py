@@ -496,3 +496,12 @@ def test_repeated_canonical_native_output_is_identical() -> None:
 def test_evidence_input_size_bound_preserved() -> None:
     with pytest.raises(Engine2ShrinkError, match="bounded canonical input size"):
         request(inputs={"x": "x" * 262_144})
+
+
+def test_documented_installed_consumer_example_is_executable() -> None:
+    text = (ROOT / "docs/engine2-shrink.md").read_text(encoding="utf-8")
+    marked = text.split("<!-- installed-consumer-example:start -->", 1)[1].split(
+        "<!-- installed-consumer-example:end -->", 1,
+    )[0]
+    example = marked.split("```python\n", 1)[1].rsplit("```", 1)[0]
+    exec(compile(example, "docs/engine2-shrink.md", "exec"), {})

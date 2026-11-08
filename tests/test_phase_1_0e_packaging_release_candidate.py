@@ -54,7 +54,7 @@ class Phase10EPackagingReleaseCandidateTests(unittest.TestCase):
             "scenario_engine._version.VERSION",
         )
         # Phase 2 changes package identity, not the frozen deterministic contract.
-        self.assertEqual(VERSION, "3.1.0")
+        self.assertEqual(VERSION, "3.2.0")
         self.assertEqual(ENGINE_VERSION, "2.0.0")
 
     def test_license_readme_and_build_backend_metadata(self):
@@ -129,27 +129,34 @@ class Phase10EPackagingReleaseCandidateTests(unittest.TestCase):
             self.assertEqual(current_payload, historical_payload)
 
     def test_current_documentation_uses_release_neutral_status(self):
-        paths = (
+        current_paths = (
             ROOT / "README.md",
+            ROOT / "docs" / "api.md",
+            ROOT / "docs" / "release-notes-3.2.0.md",
+        )
+        historical_paths = (
             ROOT / "docs" / "release-notes-3.1.0.md",
             ROOT / "docs" / "quickstart.md",
-            ROOT / "docs" / "api.md",
             ROOT / "docs" / "dsl-reference.md",
             ROOT / "docs" / "engine2-suite.md",
         )
-        documents = tuple(path.read_text(encoding="utf-8") for path in paths)
-        readme, _, quickstart, *_ = documents
+        documents = tuple(path.read_text(encoding="utf-8") for path in current_paths)
+        readme = documents[0]
+        quickstart = historical_paths[1].read_text(encoding="utf-8")
         combined = f"{readme}\n{quickstart}".lower()
         self.assertIn("pip install deterministic-scenario-engine", combined)
         self.assertNotIn("/users/", combined)
         self.assertNotIn("phase3_2_validation_venv", combined)
         self.assertIn(f"source distribution version is `{VERSION}`", combined)
         self.assertIn("pypi and github releases are authoritative", combined)
-        for path, document in zip(paths, documents, strict=True):
+        for path, document in zip(current_paths, documents, strict=True):
             with self.subTest(path=path.relative_to(ROOT)):
                 self.assertIn(VERSION, document)
                 self.assertNotRegex(document.lower(), r"unpublished\s+(?:release\s+)?candidate")
                 self.assertNotRegex(document.lower(), rf"{re.escape(VERSION)}\s+release-candidate")
+        for path in historical_paths:
+            with self.subTest(path=path.relative_to(ROOT)):
+                self.assertIn("3.1.0", path.read_text(encoding="utf-8"))
 
     def test_top_level_api_is_unchanged_by_version_authority_module(self):
         self.assertNotIn("VERSION", scenario_engine.__all__)

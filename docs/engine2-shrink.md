@@ -1,8 +1,10 @@
 # Engine 2 bounded actor-deletion minimizer
 
-`scenario_engine.engine2_shrink` is a module-qualified local-candidate API. It
-is not exported from the package root, has no CLI, and introduces no native
-artifact contract.
+`scenario_engine.engine2_shrink` is an accepted restricted, module-qualified
+API. Import `Engine2ShrinkRequest`, `Engine2ShrinkOutcome`, and
+`shrink_failed_scenario` from that module only. It is not exported from the
+package root, has no CLI, executes no plugins, and introduces no native artifact
+contract.
 
 ## Scope
 
@@ -47,8 +49,11 @@ oracle or a cross-scenario equivalence claim.
 run index, effective inputs, candidate-evaluation budget, repetition count,
 total execution budget, and an absolute monotonic-clock deadline. Candidate evaluations
 are limited to 1 through 64. Repetition defaults to three and may not be below
-three. The total execution budget includes baseline replay, baseline reruns,
-candidate reruns, and candidate replay.
+three; its maximum is 16. Actor requests have no default for either the
+candidate-evaluation budget or total execution budget. The total execution
+budget is 1 through 1024 and includes baseline replay, baseline reruns, candidate
+reruns, and candidate replay. Source is bounded to 1,048,576 UTF-8 bytes and
+canonical inputs to 262,144 bytes.
 
 Deadline checks occur between executions. They are not a hard timeout and do
 not terminate blocked application code.
@@ -78,3 +83,75 @@ The reducer does not shrink steps, transitions, initial state, inputs, schedule
 seeds, scheduler decisions, traces, invariant expressions, or plugins. It does
 not repair invalid scenarios and does not modify Engine 1, Engine 2, scheduler,
 canonical evidence, suite, release, or publication behavior.
+
+## Tested synthetic installed-consumer example
+
+This safe example has no plugins or untrusted callbacks. It constructs real
+native baseline evidence at fixed coordinates, uses a bounded absolute monotonic
+deadline, removes one never-selected actor, and exactly replays both original
+and candidate-native evidence. Run it only with a distribution that provides
+this 3.2.0 API.
+
+<!-- installed-consumer-example:start -->
+```python
+from time import monotonic
+
+from scenario_engine.engine2 import (
+    construct_result2, execute_engine2, replay_engine2, validate_engine2,
+)
+from scenario_engine.engine2_shrink import (
+    Engine2ShrinkRequest, shrink_failed_scenario,
+)
+from scenario_engine.invariants import InvariantViolation
+
+source = """dsl_version: 2
+scenario: actor-minimum
+clock: {start: '2026-01-01T00:00:00Z'}
+initial_state: {value: 0}
+actors:
+  - id: target
+    steps:
+      - id: fail
+        write: {value: {$literal: 1}}
+        transition: null
+  - id: noise-a
+    steps:
+      - id: idle
+        write: {value: {$state: value}}
+        transition: null
+invariants:
+  - id: stays-zero
+    check: {$lte: [{$state: value}, {$literal: 0}]}
+"""
+root_seed, schedule_seed, run_index = "example-root", 0, 2
+scenario = validate_engine2(source)
+try:
+    execute_engine2(scenario, root_seed, schedule_seed, run_index=run_index)
+except InvariantViolation as error:
+    baseline_result = construct_result2(scenario, error.internal_outcome)
+    baseline_schedule = error.internal_outcome.schedule
+else:
+    raise AssertionError("expected native FAILED evidence")
+
+replay_engine2(baseline_result, baseline_schedule, scenario)
+outcome = shrink_failed_scenario(Engine2ShrinkRequest(
+    source=source, result=baseline_result, schedule=baseline_schedule,
+    root_seed=root_seed, schedule_seed=schedule_seed, run_index=run_index,
+    inputs=None, max_candidate_evaluations=8, total_execution_budget=64,
+    deadline=monotonic() + 30, repetition_count=3,
+))
+assert outcome.status == "REDUCED"
+assert outcome.removed_actor_addresses == ("scenario:/actor/noise-a",)
+assert outcome.final_result is not None and outcome.final_schedule is not None
+assert outcome.final_result.failure == baseline_result.failure
+replay_engine2(
+    outcome.final_result, outcome.final_schedule,
+    validate_engine2(outcome.reduced_source),
+)
+```
+<!-- installed-consumer-example:end -->
+
+Controlled synthetic qualification found narrow diagnostic value: the reducer
+can remove fixture noise while preserving this restricted native identity and
+replay. That is synthetic-only evidence. It is not evidence of real-world
+productivity, user demand, broad defect localization, or semantic equivalence.

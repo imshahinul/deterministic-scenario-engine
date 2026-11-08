@@ -59,6 +59,27 @@ are explicit trusted participants and are **not sandboxed**. Adapters are never
 automatically discovered. Adapter side effects belong to that trusted object,
 not core evidence processing.
 
+## Engine 2 reducer boundary
+
+The module-qualified actor and input-list reducers execute locally and exclude
+all plugin-dependent scenarios; trusted plugins elsewhere remain ordinary
+unsandboxed Python. Reducers repeatedly execute trusted scenario code, so cost
+and application side effects outside the deterministic state model remain the
+caller's responsibility. Resource, source, evidence, coordinates, budgets, and
+input trees are strictly validated and bounded. Input content may nevertheless
+be sensitive. Raw input values are excluded from default representations and are
+not logged by default, but callers control any surrounding logging and storage.
+
+Reducer deadlines are cooperative checks between executions, not hard execution
+timeouts. They cannot terminate blocked or non-returning code. Each accepted
+candidate's own native Result/2 and Schedule/1 are authoritative and must replay
+against that candidate; the original schedule is not evidence for changed source
+or inputs. Outcome summaries are noncanonical convenience objects, not
+tamper-proof evidence. `SOURCE_ANCHORED_SINGLE_INVARIANT_SIGNATURE` is a
+restricted preservation predicate, not independent proof of general semantic
+equivalence. Minimality is conditional on a complete final one-deletion pass and
+never claims a global minimum.
+
 ## Explicit non-goals
 
 Scenario Engine does not provide:
@@ -79,4 +100,6 @@ Scenario Engine does not provide:
 - recursive or lossy migration;
 - remote artifact retrieval in core evidence processing;
 - distributed scheduling, workers, services, or orchestration;
-- a general-purpose sandbox, workflow engine, or database migration framework.
+- a general-purpose sandbox, workflow engine, or database migration framework;
+- plugin execution, hard termination, general-purpose minimization, or global
+  optimality from the restricted Engine 2 reducers.

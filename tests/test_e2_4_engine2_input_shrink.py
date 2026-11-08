@@ -484,3 +484,12 @@ def test_no_package_root_export_or_existing_contract_mutation() -> None:
     outcome = shrink_failed_inputs(request())
     assert outcome.final_result.contract == "scenario.result/2"
     assert outcome.final_schedule.contract == "scenario.schedule/1"
+
+
+def test_documented_installed_consumer_example_is_executable() -> None:
+    text = (ROOT / "docs/engine2-input-shrink.md").read_text(encoding="utf-8")
+    marked = text.split("<!-- installed-consumer-example:start -->", 1)[1].split(
+        "<!-- installed-consumer-example:end -->", 1,
+    )[0]
+    example = marked.split("```python\n", 1)[1].rsplit("```", 1)[0]
+    exec(compile(example, "docs/engine2-input-shrink.md", "exec"), {})
